@@ -1,16 +1,20 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { Outcome, PlannedKind } from '../../domain/lifeMap/entities';
 import { mapTheme, outcomeColor } from './mapTheme';
 
 interface MapComposerProps {
   onSubmit: (value: { title: string; kind: Exclude<PlannedKind, 'originStatus'>; outcome: Outcome }) => void;
+  onPreviewChange?: (value: { title: string; kind: Exclude<PlannedKind, 'originStatus'>; outcome: Outcome }) => void;
 }
 
-export const MapComposer = ({ onSubmit }: MapComposerProps) => {
+export const MapComposer = ({ onSubmit, onPreviewChange }: MapComposerProps) => {
   const [title, setTitle] = useState('New step');
   const [kind, setKind] = useState<Exclude<PlannedKind, 'originStatus'>>('task');
   const [outcome, setOutcome] = useState<Outcome>('todo');
+  useEffect(() => {
+    onPreviewChange?.({ title, kind, outcome });
+  }, [title, kind, outcome, onPreviewChange]);
   return (
     <View>
       <Text style={styles.label}>Title</Text>
@@ -27,7 +31,7 @@ export const MapComposer = ({ onSubmit }: MapComposerProps) => {
           <Chip key={candidate} active={outcome === candidate} label={candidate} color={outcomeColor[candidate]} onPress={() => setOutcome(candidate)} />
         ))}
       </View>
-      <Pressable accessibilityRole="button" disabled={!title.trim()} onPress={() => onSubmit({ title: title.trim(), kind, outcome })} style={styles.submit}>
+      <Pressable accessibilityRole="button" accessibilityLabel="Add planned point to the map" disabled={!title.trim()} onPress={() => onSubmit({ title: title.trim(), kind, outcome })} style={styles.submit}>
         <Text style={styles.submitText}>Add to the map</Text>
       </Pressable>
     </View>

@@ -24,6 +24,8 @@ interface MapBottomSheetProps {
   onCreate: (value: { title: string; kind: Exclude<PlannedKind, 'originStatus'>; outcome: Outcome }) => void;
   onConnect: (fromNodeId: string, toNodeId: string) => void;
   onArmDelete: (id: string) => void;
+  onSheetHeight: (height: number) => void;
+  onComposerDraft: (value: { title: string; kind: Exclude<PlannedKind, 'originStatus'>; outcome: Outcome }) => void;
 }
 
 const nextOutcome: Record<Outcome, Outcome> = { success: 'todo', todo: 'failed', failed: 'success' };
@@ -45,6 +47,8 @@ export const MapBottomSheet = ({
   onCreate,
   onConnect,
   onArmDelete,
+  onSheetHeight,
+  onComposerDraft,
 }: MapBottomSheetProps) => {
   const [query, setQuery] = useState('');
   const [routeFrom, setRouteFrom] = useState('start');
@@ -97,7 +101,11 @@ export const MapBottomSheet = ({
 
   return (
     <View style={styles.scrim} pointerEvents="box-none">
-      <View accessibilityViewIsModal style={styles.sheet}>
+      <View
+        accessibilityViewIsModal
+        style={styles.sheet}
+        onLayout={(event) => onSheetHeight(event.nativeEvent.layout.height)}
+      >
         <View style={styles.handle} />
         <View style={styles.sheetHeader}>
           <View style={styles.titleCopy}>
@@ -119,7 +127,7 @@ export const MapBottomSheet = ({
               <TextInput accessibilityLabel="Search destination" value={query} onChangeText={setQuery} placeholder="Search a task, checkpoint, or goal" placeholderTextColor={mapTheme.faint} style={styles.input} />
               <View style={styles.results}>
                 {routeTargets.map((option) => (
-                  <Pressable key={option.id} accessibilityRole="button" onPress={() => onFindRoad(routeFrom, option.id)} style={styles.result}>
+                  <Pressable key={option.id} accessibilityRole="button" accessibilityLabel={`Find road to ${option.title}`} onPress={() => onFindRoad(routeFrom, option.id)} style={styles.result}>
                     <View style={[styles.resultIcon, { borderColor: outcomeColor[option.outcome] }]}><Text style={{ color: outcomeColor[option.outcome] }}>›</Text></View>
                     <View style={styles.resultCopy}><Text style={styles.resultTitle}>{option.title}</Text><Text style={styles.resultMeta}>{option.depthRank} depth · {option.kind}</Text></View>
                     <Text style={styles.resultArrow}>›</Text>
@@ -158,7 +166,7 @@ export const MapBottomSheet = ({
             </>
           )}
 
-          {session.sheet === 'composer' && <MapComposer onSubmit={onCreate} />}
+          {session.sheet === 'composer' && <MapComposer onSubmit={onCreate} onPreviewChange={onComposerDraft} />}
 
           {session.sheet === 'detail' && selectedNode && (
             <>

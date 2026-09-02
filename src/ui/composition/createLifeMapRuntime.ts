@@ -95,7 +95,7 @@ export class LifeMapRuntime {
     });
   }
 
-  async insertNode(connectionId: string): Promise<void> {
+  async insertNode(connectionId: string, details?: { title: string; kind: Exclude<PlannedKind, 'originStatus'>; outcome: PlannedNode['outcome'] }): Promise<void> {
     const [snapshot, layout] = await Promise.all([this.lifeMaps.load(), this.layouts.load()]);
     const connection = snapshot.connections.find((candidate) => candidate.id === connectionId);
     if (!connection) throw new Error('Connection no longer exists');
@@ -104,7 +104,7 @@ export class LifeMapRuntime {
     const nodeId = this.id('node');
     await this.editLifeMap.splitConnection({
       connectionId,
-      node: { id: nodeId, title: 'New step', description: '', kind: 'task', outcome: 'todo' },
+      node: { id: nodeId, title: details?.title ?? 'New step', description: '', kind: details?.kind ?? 'task', outcome: details?.outcome ?? 'todo' },
       incomingConnectionId: this.id('connection'),
       outgoingConnectionId: this.id('connection'),
     }, { worldX: (from.worldX + to.worldX) / 2, depthRank: Math.max(from.depthRank + 1, Math.round((from.depthRank + to.depthRank) / 2)) });

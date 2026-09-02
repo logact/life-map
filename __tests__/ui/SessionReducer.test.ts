@@ -25,4 +25,33 @@ describe('Life Map session reducer', () => {
     expect(armed.deleteArmedId).toBe('run');
     expect(lifeMapSessionReducer(armed, { type: 'close-sheet' }).deleteArmedId).toBeUndefined();
   });
+
+  it('tracks the path draft and clears it on release, selection, and mode change', () => {
+    const draft = { fromNodeId: 'a', x: 10, y: 20, targetNodeId: 'b' };
+    const dragging = lifeMapSessionReducer(initialLifeMapSession, { type: 'set-draft-path', draft });
+    expect(dragging.draftPath).toEqual(draft);
+    expect(lifeMapSessionReducer(dragging, { type: 'set-draft-path' }).draftPath).toBeUndefined();
+    expect(lifeMapSessionReducer(dragging, { type: 'select', selection: { type: 'node', id: 'b' } }).draftPath).toBeUndefined();
+    expect(lifeMapSessionReducer(dragging, { type: 'set-mode', mode: 'visual' }).draftPath).toBeUndefined();
+  });
+
+  it('keeps composer point and draft together and clears both on close', () => {
+    const opened = lifeMapSessionReducer(initialLifeMapSession, {
+      type: 'open-composer',
+      point: { worldX: 100, depthRank: 3, connectionId: 'c-1' },
+    });
+    expect(opened.sheet).toBe('composer');
+    expect(opened.composerPoint?.connectionId).toBe('c-1');
+    const typed = lifeMapSessionReducer(opened, { type: 'set-composer-draft', draft: { title: 'Gym', kind: 'task', outcome: 'todo' } });
+    expect(typed.composerDraft?.title).toBe('Gym');
+    const closed = lifeMapSessionReducer(typed, { type: 'close-sheet' });
+    expect(closed.composerPoint).toBeUndefined();
+    expect(closed.composerDraft).toBeUndefined();
+  });
+
+  it('stores the measured sheet height without churning on sub-pixel changes', () => {
+    const measured = lifeMapSessionReducer(initialLifeMapSession, { type: 'set-sheet-height', height: 320 });
+    expect(measured.sheetHeight).toBe(320);
+    expect(lifeMapSessionReducer(measured, { type: 'set-sheet-height', height: 320.4 })).toBe(measured);
+  });
 });

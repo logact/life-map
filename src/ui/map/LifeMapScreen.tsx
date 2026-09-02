@@ -1,19 +1,23 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, LayoutChangeEvent, Pressable, StatusBar, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { PortraitMapProjection } from '../../application/map/projectionTypes';
+import { PortraitMapProjection, ScreenPoint } from '../../application/map/projectionTypes';
 import { ROAD_BOTTOM_Y, ROAD_RANK_GAP, RoadLayoutService } from '../../application/map/RoadLayoutService';
-import { fitCameraToBounds, zoomCameraAt } from '../../application/map/camera';
+import { fitCameraToBounds, focusCameraAboveSheet, zoomCameraAt } from '../../application/map/camera';
 import { LifeMapError } from '../../domain/lifeMap/LifeMapErrors';
 import { useLifeMapRuntime } from '../composition/LifeMapProvider';
 import { RuntimeNodeOption } from '../composition/createLifeMapRuntime';
-import { LifeMapCanvas } from './LifeMapCanvas';
+import { ComposerPreview, LifeMapCanvas } from './LifeMapCanvas';
 import { MapBottomSheet } from './MapBottomSheet';
 import { MapControls } from './MapControls';
 import { MapHeader } from './MapHeader';
+import { MapHint } from './MapHint';
+import { quadraticPointAt } from './mapGeometry';
 import { mapTheme } from './mapTheme';
+import { selectionFocusPoint } from './selectionFocus';
 import { useLifeMapSession } from './useLifeMapSession';
 import { useMapGestures } from './useMapGestures';
+import { useReducedMotion } from './useReducedMotion';
 
 export const LifeMapScreen = () => {
   const runtime = useLifeMapRuntime();
@@ -24,7 +28,10 @@ export const LifeMapScreen = () => {
   const previousProjection = useRef<PortraitMapProjection | undefined>(undefined);
   const [options, setOptions] = useState<RuntimeNodeOption[]>([]);
   const [error, setError] = useState<string>();
+  const [sparkIds, setSparkIds] = useState<string[]>([]);
+  const sparkTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const layoutService = useRef(new RoadLayoutService()).current;
+  const reducedMotion = useReducedMotion();
   const viewport = { width: mapSize.width, height: mapSize.height };
 
   const load = useCallback(async () => {
@@ -51,12 +58,27 @@ export const LifeMapScreen = () => {
 
   useEffect(() => { void load(); }, [load]);
 
+  useEffect(() => () => {
+    if (sparkTimer.current) clearTimeout(sparkTimer.current);
+  }, []);
+
   const runMutation = async (operation: () => Promise<unknown>, success?: string) => {
     try {
+      const before = previousProjection.current;
       await operation();
       dispatch({ type: 'close-sheet' });
       if (success) dispatch({ type: 'toast', message: success });
       await load();
+      const after = previousProjection.current;
+      if (before && after) {
+        const known = new Set(before.connections.map((connection) => connection.id));
+        const fresh = after.connections.filter((connection) => !known.has(connection.id)).map((connection) => connection.id);
+        if (fresh.length > 0) {
+          setSparkIds(fresh);
+          if (sparkTimer.current) clearTimeout(sparkTimer.current);
+          sparkTimer.current = setTimeout(() => setSparkIds([]), 1500);
+        }
+      }
     } catch (caught) {
       const message = caught instanceof LifeMapError ? caught.message : caught instanceof Error ? caught.message : String(caught);
       dispatch({ type: 'toast', message });
@@ -86,18 +108,43 @@ export const LifeMapScreen = () => {
     void runMutation(() => runtime.moveRecord(id, world.x, world.y), 'Record placement updated');
   };
 
+  const nearestNodeTo = (screenX: number, screenY: number, excludeId: string) =>
+    projection!.nodes
+      .filter((node) => node.id !== excludeId)
+      .map((node) => ({ node, distance: Math.hypot(node.x - screenX, node.y - screenY) }))
+      .sort((left, right) => left.distance - right.distance || left.node.id.localeCompare(right.node.id))[0];
+
+  const handlePathDrag = (nodeId: string, point?: ScreenPoint) => {
+    if (!point) {
+      dispatch({ type: 'set-draft-path' });
+      return;
+    }
+    const nearest = nearestNodeTo(point.x, point.y, nodeId);
+    dispatch({
+      type: 'set-draft-path',
+      draft: { fromNodeId: nodeId, x: point.x, y: point.y, targetNodeId: nearest && nearest.distance <= 66 ? nearest.node.id : undefined },
+    });
+  };
+
   const handlePathDrop = (nodeId: string, screenX: number, screenY: number) => {
     const source = projection.nodes.find((node) => node.id === nodeId);
-    if (!source || source.depthRank >= 8) {
+    if (!source) return;
+    if (source.depthRank >= 8) {
       dispatch({ type: 'toast', message: 'A destination at the top has no forward depth available.' });
       return;
     }
-    const nearest = projection.nodes
-      .filter((node) => node.id !== nodeId && node.depthRank > source.depthRank)
-      .map((node) => ({ node, distance: Math.hypot(node.x - screenX, node.y - screenY) }))
-      .sort((left, right) => left.distance - right.distance || left.node.id.localeCompare(right.node.id))[0];
+    const nearest = nearestNodeTo(screenX, screenY, nodeId);
     if (nearest && nearest.distance <= 66) {
-      void runMutation(() => runtime.connect(nodeId, nearest.node.id), `Connected to ${nearest.node.title}`);
+      if (nearest.node.depthRank <= source.depthRank) {
+        dispatch({ type: 'toast', message: 'Paths must move forward toward the top' });
+        return;
+      }
+      const duplicate = projection.connections.some((connection) => connection.fromNodeId === nodeId && connection.toNodeId === nearest.node.id);
+      if (duplicate) {
+        dispatch({ type: 'toast', message: 'Those nodes already have a path' });
+        return;
+      }
+      void runMutation(() => runtime.connect(nodeId, nearest.node.id), `New segment: ${source.title} → ${nearest.node.title}`);
       return;
     }
     const world = layoutService.screenToWorld({ x: screenX, y: screenY }, viewport, session.camera);
@@ -108,13 +155,26 @@ export const LifeMapScreen = () => {
     } });
   };
 
+  const handleEdgeLongPress = (connectionId: string) => {
+    if (session.mode !== 'edit') return;
+    const connection = projection.connections.find((candidate) => candidate.id === connectionId);
+    if (!connection) return;
+    const midpoint = quadraticPointAt(connection.from, connection.control, connection.to, 0.5);
+    const world = layoutService.screenToWorld(midpoint, viewport, session.camera);
+    dispatch({ type: 'open-composer', point: {
+      worldX: Math.max(8, Math.min(382, world.x)),
+      depthRank: Math.max(1, Math.min(8, Math.round((ROAD_BOTTOM_Y - world.y) / ROAD_RANK_GAP))),
+      connectionId,
+    } });
+  };
+
   const handleBendDrop = (connectionId: string, screenX: number, screenY: number) => {
     const connection = projection.connections.find((candidate) => candidate.id === connectionId);
     if (!connection) return;
     const midpoint = { x: (connection.from.x + connection.to.x) / 2, y: (connection.from.y + connection.to.y) / 2 };
     void runMutation(
       () => runtime.bendConnection(connectionId, (screenX - midpoint.x) / session.camera.scale, (screenY - midpoint.y) / session.camera.scale),
-      'Curve updated',
+      'Edge curve moved',
     );
   };
 
@@ -128,6 +188,10 @@ export const LifeMapScreen = () => {
     dispatch({ type: 'set-camera', camera: fitCameraToBounds(result.bounds, viewport, 80) });
   };
 
+  const handleComposerDraft = useCallback((draft: { title: string; kind: 'task' | 'checkpoint' | 'goal'; outcome: 'success' | 'todo' | 'failed' }) => {
+    dispatch({ type: 'set-composer-draft', draft });
+  }, []);
+
   if (!projection && !error) {
     return <SafeAreaView style={styles.safe}><StatusBar barStyle="dark-content" /><View style={styles.center}><ActivityIndicator color={mapTheme.forest} /><Text style={styles.loading}>Preparing your roads…</Text></View></SafeAreaView>;
   }
@@ -135,6 +199,33 @@ export const LifeMapScreen = () => {
     return <SafeAreaView style={styles.safe}><View style={styles.center}><Text style={styles.errorTitle}>The map could not be loaded</Text><Text style={styles.errorBody}>{error}</Text><Pressable onPress={() => void load()} style={styles.retry}><Text style={styles.retryText}>Try again</Text></Pressable></View></SafeAreaView>;
   }
   if (!projection) return null;
+
+  const routeActive = !!session.activeRoute;
+  const selectedSegmentTitle = session.selection?.type === 'segment'
+    ? projection.segmentOverlays.find((overlay) => overlay.id === session.selection?.id)?.title
+    : undefined;
+
+  let composerPreview: ComposerPreview | undefined;
+  if (session.sheet === 'composer' && session.composerPoint) {
+    const point = session.composerPoint;
+    let screenPoint: ScreenPoint | undefined;
+    if (point.connectionId) {
+      const connection = projection.connections.find((candidate) => candidate.id === point.connectionId);
+      if (connection) screenPoint = quadraticPointAt(connection.from, connection.control, connection.to, 0.5);
+    }
+    if (!screenPoint) {
+      screenPoint = layoutService.worldToScreen({ x: point.worldX, y: ROAD_BOTTOM_Y - point.depthRank * ROAD_RANK_GAP }, viewport, session.camera);
+    }
+    composerPreview = {
+      x: screenPoint.x,
+      y: screenPoint.y,
+      title: session.composerDraft?.title ?? '',
+      kind: session.composerDraft?.kind ?? 'task',
+      outcome: session.composerDraft?.outcome ?? 'todo',
+      fromNodeId: point.fromNodeId,
+      connectionId: point.connectionId,
+    };
+  }
 
   return (
     <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>
@@ -155,13 +246,28 @@ export const LifeMapScreen = () => {
             mode={session.mode}
             gestureHandlers={gestureHandlers}
             selected={session.selection}
+            routeActive={routeActive}
+            reducedMotion={reducedMotion}
+            draftPath={session.draftPath}
+            composerPreview={composerPreview}
+            sparkConnectionIds={sparkIds}
             onSelect={(selection) => {
-              if (selection.type === 'summary') dispatch({ type: 'set-level', level: session.semanticLevel + 1 });
+              if (selection.type === 'summary') {
+                dispatch({ type: 'set-level', level: session.semanticLevel + 1 });
+                dispatch({ type: 'select', selection });
+                return;
+              }
               dispatch({ type: 'select', selection });
+              const point = selectionFocusPoint(selection, projection);
+              if (point) {
+                const world = layoutService.screenToWorld(point, viewport, session.camera);
+                dispatch({ type: 'set-camera', camera: focusCameraAboveSheet(session.camera, world, viewport, session.sheetHeight || 260) });
+              }
             }}
             onMoveNode={handleMoveNode}
             onMoveRecord={handleMoveRecord}
             onPathHandleDrop={handlePathDrop}
+            onPathHandleDrag={handlePathDrag}
             onBendDrop={handleBendDrop}
             onLongPress={(screenX, screenY) => {
               const world = layoutService.screenToWorld({ x: screenX, y: screenY }, viewport, session.camera);
@@ -171,6 +277,7 @@ export const LifeMapScreen = () => {
                 segmentId: session.selection?.type === 'segment' ? session.selection.id : undefined,
               } });
             }}
+            onEdgeLongPress={handleEdgeLongPress}
           />
           <MapControls
             mode={session.mode}
@@ -179,6 +286,13 @@ export const LifeMapScreen = () => {
             onLevel={(level) => dispatch({ type: 'set-level', level })}
             onCameraZoom={(factor) => dispatch({ type: 'set-camera', camera: zoomCameraAt(session.camera, factor, { x: viewport.width / 2, y: viewport.height / 2 }, viewport) })}
             onResetLayout={() => void runMutation(() => runtime.resetLayout(), 'Placements reset')}
+          />
+          <MapHint
+            mode={session.mode}
+            level={session.semanticLevel}
+            scale={session.camera.scale}
+            selectedSegmentTitle={selectedSegmentTitle}
+            routeActive={routeActive}
           />
           {session.mode === 'edit' && (
             <Pressable accessibilityRole="button" accessibilityLabel="Add Record" onPress={() => dispatch({ type: 'open-sheet', sheet: 'record' })} style={styles.capture}>
@@ -199,7 +313,7 @@ export const LifeMapScreen = () => {
         onEditNode={(id, value) => void runMutation(() => runtime.editNode(id, value), 'Node updated')}
         onDelete={(type, id) => void runMutation(() => type === 'node' ? runtime.removeNode(id, true) : runtime.removeConnection(id), 'Removed safely')}
         onInsert={(id) => void runMutation(() => runtime.insertNode(id), 'Connection split with a new step')}
-        onBend={(id, offsetX) => void runMutation(() => runtime.bendConnection(id, offsetX, 0), 'Curve updated')}
+        onBend={(id, offsetX) => void runMutation(() => runtime.bendConnection(id, offsetX, 0), 'Edge curve moved')}
         onAddRecord={(targetId, summary) => void runMutation(async () => {
           await runtime.addRecord(targetId, summary);
           dispatch({ type: 'set-level', level: 4 });
@@ -208,10 +322,17 @@ export const LifeMapScreen = () => {
         onCreate={(value) => {
           const point = session.composerPoint;
           if (!point) return;
-          void runMutation(() => runtime.createNode({ ...value, ...point }), 'Planned point added');
+          if (point.connectionId) {
+            void runMutation(() => runtime.insertNode(point.connectionId!, value), 'Connection split with a new step');
+            return;
+          }
+          const { connectionId, ...placement } = point;
+          void runMutation(() => runtime.createNode({ ...value, ...placement }), 'Planned point added');
         }}
         onConnect={(from, to) => void runMutation(() => runtime.connect(from, to), 'Forward connection added')}
         onArmDelete={(id) => dispatch({ type: 'arm-delete', id })}
+        onSheetHeight={(height) => dispatch({ type: 'set-sheet-height', height })}
+        onComposerDraft={handleComposerDraft}
       />
     </SafeAreaView>
   );

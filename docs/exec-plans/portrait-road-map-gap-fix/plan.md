@@ -1,6 +1,8 @@
 # Portrait road-map gap-fix plan
 
-Status: **Draft — 2026-09-02**
+Status: **Implemented — 2026-09-02**
+
+Implementation report: [`../../cycles/portrait-road-map-gap-fix/cycle-report.md`](../../cycles/portrait-road-map-gap-fix/cycle-report.md)
 
 Prototype: [`portrait-road-map.html](../../prototypes/portrait-road-map.html)
 
