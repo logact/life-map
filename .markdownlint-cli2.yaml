@@ -1,0 +1,11 @@
+config:
+  default: true
+  MD009: false
+  MD012: false
+  MD013: false
+  MD023: false
+
+ignores:
+  - ".agents/**"
+  - ".git/**"
+  - "node_modules/**"

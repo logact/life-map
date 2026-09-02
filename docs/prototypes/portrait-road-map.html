@@ -1,0 +1,4721 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#f3efe4">
+  <meta name="description" content="Interactive iOS portrait prototype for a forward-upward Life Map made from multiple roads, goals, tasks, and records.">
+  <title>Becoming — Portrait Road Map</title>
+  <style>
+    :root {
+      --canvas: #f1ede3;
+      --paper: #fffdf8;
+      --paper-strong: #ffffff;
+      --ink: #183d35;
+      --muted: #6e7c75;
+      --faint: #a8afa8;
+      --line: #d9d3c6;
+      --forest: #255c4c;
+      --forest-deep: #163f35;
+      --sage: #c8d9bd;
+      --sage-dark: #5f7b69;
+      --gold: #e4b84e;
+      --gold-deep: #8f661f;
+      --amber: #d09234;
+      --amber-soft: #f6e5bb;
+      --violet: #765a98;
+      --violet-soft: #ddd0eb;
+      --gone: #4f8967;
+      --todo: #d09234;
+      --blocked: #ad5045;
+      --shadow: 0 18px 55px rgba(31, 53, 47, 0.16);
+    }
+
+    * { box-sizing: border-box; }
+
+    html,
+    body {
+      width: 100%;
+      min-width: 320px;
+      min-height: 100%;
+      margin: 0;
+      color: var(--ink);
+      background: #ded9ce;
+      font-family: Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      -webkit-font-smoothing: antialiased;
+      overscroll-behavior: none;
+    }
+
+    button { font: inherit; }
+
+    .page {
+      display: grid;
+      min-height: 100dvh;
+      place-items: center;
+      padding: 24px;
+      background:
+        radial-gradient(circle at 20% 5%, rgba(229, 185, 79, 0.2), transparent 27rem),
+        radial-gradient(circle at 85% 85%, rgba(78, 137, 103, 0.18), transparent 30rem),
+        #e6e1d6;
+    }
+
+    .device {
+      position: relative;
+      width: min(100%, 390px);
+      height: min(844px, calc(100dvh - 48px));
+      min-height: 680px;
+      overflow: hidden;
+      border: 1px solid rgba(24, 61, 53, 0.14);
+      border-radius: 42px;
+      background: var(--canvas);
+      box-shadow: var(--shadow), inset 0 0 0 7px rgba(255,255,255,0.28);
+      isolation: isolate;
+    }
+
+    .status-bar {
+      position: absolute;
+      z-index: 50;
+      top: 0;
+      left: 0;
+      right: 0;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      height: 32px;
+      padding: 9px 23px 0;
+      pointer-events: none;
+      font-size: 11px;
+      font-weight: 750;
+      letter-spacing: 0.01em;
+    }
+
+    .system-icons {
+      display: flex;
+      align-items: center;
+      gap: 5px;
+    }
+
+    .signal {
+      display: flex;
+      align-items: flex-end;
+      gap: 1.5px;
+      height: 9px;
+    }
+
+    .signal i {
+      display: block;
+      width: 2px;
+      border-radius: 2px;
+      background: var(--ink);
+    }
+
+    .signal i:nth-child(1) { height: 3px; }
+    .signal i:nth-child(2) { height: 5px; }
+    .signal i:nth-child(3) { height: 7px; }
+    .signal i:nth-child(4) { height: 9px; }
+
+    .battery {
+      width: 18px;
+      height: 9px;
+      padding: 1px;
+      border: 1px solid var(--ink);
+      border-radius: 3px;
+    }
+
+    .battery::before {
+      content: "";
+      display: block;
+      width: 12px;
+      height: 5px;
+      border-radius: 1px;
+      background: var(--ink);
+    }
+
+    .app-header {
+      position: absolute;
+      z-index: 30;
+      top: 32px;
+      left: 0;
+      right: 0;
+      height: 96px;
+      padding: 12px 16px 10px;
+      border-bottom: 1px solid rgba(24, 61, 53, 0.09);
+      background: rgba(255, 253, 248, 0.94);
+      backdrop-filter: blur(18px);
+    }
+
+    .header-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      min-width: 0;
+      gap: 9px;
+    }
+
+    .brand-mark {
+      position: relative;
+      width: 34px;
+      height: 34px;
+      flex: 0 0 34px;
+      border: 1px solid rgba(24, 61, 53, 0.13);
+      border-radius: 50%;
+      background: var(--paper-strong);
+      box-shadow: 0 6px 18px rgba(24, 61, 53, 0.09);
+    }
+
+    .brand-mark::before,
+    .brand-mark::after {
+      content: "";
+      position: absolute;
+      border-radius: 50%;
+    }
+
+    .brand-mark::before {
+      top: 6px;
+      left: 6px;
+      width: 13px;
+      height: 13px;
+      background: var(--gold);
+    }
+
+    .brand-mark::after {
+      right: 5px;
+      bottom: 5px;
+      width: 10px;
+      height: 10px;
+      background: var(--forest);
+    }
+
+    .brand-copy { min-width: 0; }
+
+    .eyebrow {
+      display: block;
+      margin-bottom: 1px;
+      color: var(--sage-dark);
+      font-size: 8px;
+      font-weight: 850;
+      letter-spacing: 0.16em;
+      text-transform: uppercase;
+    }
+
+    h1 {
+      margin: 0;
+      overflow: hidden;
+      font-family: Georgia, "Times New Roman", serif;
+      font-size: 20px;
+      font-weight: 600;
+      letter-spacing: -0.035em;
+      line-height: 1;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .header-actions {
+      display: flex;
+      flex: 0 0 auto;
+      gap: 7px;
+    }
+
+    .round-button {
+      display: grid;
+      width: 35px;
+      height: 35px;
+      padding: 0;
+      border: 1px solid rgba(24, 61, 53, 0.12);
+      border-radius: 50%;
+      color: var(--ink);
+      background: var(--paper-strong);
+      cursor: pointer;
+      place-items: center;
+      -webkit-tap-highlight-color: transparent;
+    }
+
+    .round-button:active { transform: scale(0.94); }
+
+    .round-button svg {
+      width: 17px;
+      height: 17px;
+      fill: none;
+      stroke: currentColor;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+      stroke-width: 1.8;
+    }
+
+    .map-summary {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 9px;
+      margin-top: 10px;
+    }
+
+    .progress-copy {
+      display: flex;
+      align-items: center;
+      min-width: 0;
+      gap: 8px;
+      color: var(--muted);
+      font-size: 10px;
+      font-weight: 700;
+    }
+
+    .progress-track {
+      width: 78px;
+      height: 5px;
+      overflow: hidden;
+      border-radius: 999px;
+      background: #e1ddd2;
+    }
+
+    .progress-track span {
+      display: block;
+      width: 42%;
+      height: 100%;
+      border-radius: inherit;
+      background: var(--gone);
+    }
+
+    .forward-chip {
+      display: inline-flex;
+      align-items: center;
+      flex: 0 0 auto;
+      gap: 5px;
+      padding: 4px 8px 4px 6px;
+      border: 1px solid rgba(24, 61, 53, 0.1);
+      border-radius: 999px;
+      color: var(--forest);
+      background: #eef3e9;
+      font-size: 9px;
+      font-weight: 850;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+    }
+
+    .forward-chip b {
+      display: grid;
+      width: 18px;
+      height: 18px;
+      border-radius: 50%;
+      color: var(--paper);
+      background: var(--forest);
+      font-size: 12px;
+      place-items: center;
+    }
+
+    .map-shell {
+      position: absolute;
+      top: 128px;
+      right: 0;
+      bottom: 0;
+      left: 0;
+      overflow: hidden;
+      background:
+        radial-gradient(circle at 75% 22%, rgba(255,255,255,0.74), transparent 12rem),
+        linear-gradient(180deg, #f4f0e6 0%, #ebe6db 100%);
+    }
+
+    .map-shell::before,
+    .map-shell::after {
+      content: "";
+      position: absolute;
+      pointer-events: none;
+      border: 1px solid rgba(95, 123, 105, 0.09);
+      border-radius: 49% 51% 63% 37%;
+      transform: rotate(-12deg);
+    }
+
+    .map-shell::before {
+      top: 70px;
+      right: -75px;
+      width: 230px;
+      height: 300px;
+      box-shadow:
+        0 0 0 22px rgba(95, 123, 105, 0.025),
+        0 0 0 45px rgba(95, 123, 105, 0.02);
+    }
+
+    .map-shell::after {
+      bottom: 40px;
+      left: -100px;
+      width: 260px;
+      height: 210px;
+      border-color: rgba(208, 146, 52, 0.09);
+      box-shadow: 0 0 0 27px rgba(208, 146, 52, 0.02);
+    }
+
+    .map-canvas {
+      position: absolute;
+      inset: 0;
+      overflow: hidden;
+      touch-action: none;
+      user-select: none;
+      -webkit-user-select: none;
+    }
+
+    .roads,
+    .node-layer {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      transform-origin: 0 0;
+      transition: transform 280ms cubic-bezier(.2,.8,.2,1);
+      will-change: transform;
+    }
+
+    .roads { z-index: 4; overflow: visible; }
+    .node-layer { --map-node-scale: 1; z-index: 8; pointer-events: none; }
+
+    .road-visible,
+    .road-hit {
+      fill: none;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+      vector-effect: non-scaling-stroke;
+    }
+
+    .segment-corridor {
+      fill: none;
+      stroke: rgba(66, 105, 91, 0.12);
+      stroke-linecap: round;
+      stroke-linejoin: round;
+      stroke-width: 16;
+      vector-effect: non-scaling-stroke;
+    }
+
+    .segment-corridor.is-parent {
+      stroke: rgba(208, 146, 52, 0.13);
+      stroke-width: 22;
+    }
+
+    .device[data-mode="visual"] .map-canvas { cursor: grab; }
+    .device[data-mode="visual"] .map-node,
+    .device[data-mode="visual"] .road-hit { cursor: pointer; }
+    .device[data-mode="edit"] .road-hit { cursor: move; }
+
+    .segment-group[data-tone="foundation"] .segment-corridor { stroke: rgba(79, 137, 103, 0.14); }
+    .segment-group[data-tone="distance"] .segment-corridor { stroke: rgba(208, 146, 52, 0.15); }
+    .segment-group[data-tone="readiness"] .segment-corridor { stroke: rgba(118, 90, 152, 0.13); }
+
+    .segment-badge {
+      cursor: pointer;
+      pointer-events: auto;
+    }
+
+    .segment-badge rect {
+      fill: rgba(255, 253, 248, 0.96);
+      stroke: rgba(24, 61, 53, 0.22);
+      stroke-width: 1;
+      vector-effect: non-scaling-stroke;
+    }
+
+    .segment-badge text {
+      fill: var(--forest);
+      font-family: Inter, ui-sans-serif, sans-serif;
+      font-size: 7px;
+      font-weight: 850;
+      letter-spacing: 0.01em;
+      text-anchor: middle;
+    }
+
+    .segment-badge .segment-level {
+      fill: var(--muted);
+      font-size: 5.5px;
+      font-weight: 760;
+      text-transform: uppercase;
+    }
+
+    .segment-badge.is-selected rect {
+      fill: #fff8df;
+      stroke: var(--todo);
+      stroke-width: 2;
+    }
+
+    .road-visible {
+      stroke-width: 3.5;
+      transition: opacity 180ms ease, stroke-width 180ms ease;
+    }
+
+    .road-hit {
+      pointer-events: stroke;
+      cursor: pointer;
+      stroke: transparent;
+      stroke-width: 22;
+    }
+
+    .road-group[data-state="gone"] .road-visible { stroke: var(--gone); }
+    .road-group[data-state="todo"] .road-visible {
+      stroke: var(--paper-strong);
+      stroke-dasharray: 8 7;
+      filter: drop-shadow(0 0 1px rgba(24, 61, 53, 0.82));
+    }
+    .road-group[data-state="blocked"] .road-visible { stroke: var(--blocked); stroke-dasharray: 3 7; }
+    .road-visible[data-state="gone"] { stroke: var(--gone); }
+    .road-visible[data-state="todo"] {
+      stroke: var(--paper-strong);
+      filter: drop-shadow(0 0 1px rgba(24, 61, 53, 0.82));
+    }
+    .road-visible[data-state="blocked"] { stroke: var(--blocked); }
+    .road-visible.is-filter-muted { opacity: 0.11; }
+    .road-group.is-muted .road-visible { opacity: 0.11; }
+    .road-group.is-muted .blocker,
+    .road-group.is-muted .summary-badge { opacity: 0.11; }
+    .road-group.is-selected .road-visible {
+      stroke-width: 5.5;
+      filter: drop-shadow(0 0 3px rgba(255, 253, 248, 0.98)) drop-shadow(0 0 7px rgba(208, 146, 52, 0.72));
+      animation: selected-road-light 1.45s ease-in-out infinite;
+    }
+
+    .road-group.is-dragging .road-visible {
+      stroke-width: 6;
+      filter: drop-shadow(0 0 7px rgba(208, 146, 52, 0.78));
+    }
+
+    .road-spark,
+    .composer-preview-spark {
+      fill: none;
+      stroke: rgba(255, 253, 248, 0.98);
+      stroke-width: 2.2;
+      stroke-dasharray: 1 17;
+      stroke-linecap: round;
+      pointer-events: none;
+      filter: drop-shadow(0 0 3px rgba(255, 255, 255, 0.95));
+      vector-effect: non-scaling-stroke;
+      animation: road-spark-travel 900ms linear infinite;
+    }
+
+    @keyframes selected-road-light {
+      0%, 100% { opacity: 0.9; }
+      50% { opacity: 1; }
+    }
+
+    @keyframes road-spark-travel {
+      to { stroke-dashoffset: -36; }
+    }
+    .road-group.is-route .road-visible {
+      stroke-width: 5.5;
+      opacity: 1;
+      filter: drop-shadow(0 2px 2px rgba(24, 61, 53, 0.2));
+    }
+
+    .road-group.is-summary .road-visible {
+      stroke-width: 5;
+      opacity: 0.9;
+    }
+
+    .road-summary-underlay {
+      fill: none;
+      stroke: rgba(24, 61, 53, 0.24);
+      stroke-width: 7;
+      stroke-linecap: round;
+      pointer-events: none;
+      vector-effect: non-scaling-stroke;
+    }
+
+    .road-group.is-summary .road-visible-segment {
+      stroke-linecap: round;
+      vector-effect: non-scaling-stroke;
+    }
+
+    .road-group.is-summary .road-visible-segment[data-state="gone"] {
+      stroke: var(--gone);
+      filter: none;
+    }
+
+    .road-group.is-summary .road-visible-segment[data-state="todo"] {
+      stroke: var(--paper-strong);
+      filter: drop-shadow(0 0 1px rgba(24, 61, 53, 0.82));
+    }
+
+    .road-group.is-summary .road-visible-segment[data-state="blocked"] {
+      stroke: var(--blocked);
+      filter: none;
+    }
+
+    .road-group.is-summary .road-visible-segment.is-filter-muted { opacity: 0.11; }
+
+    .road-group.is-summary.is-selected .road-visible-segment {
+      filter: drop-shadow(0 0 3px rgba(255, 253, 248, 0.98)) drop-shadow(0 0 7px rgba(208, 146, 52, 0.72));
+    }
+
+    .road-group.is-summary.is-route .road-visible-segment {
+      filter: drop-shadow(0 2px 2px rgba(24, 61, 53, 0.2));
+    }
+
+    .summary-badge rect {
+      fill: rgba(255, 253, 248, 0.96);
+      stroke: var(--todo);
+      stroke-width: 1;
+      vector-effect: non-scaling-stroke;
+    }
+
+    .summary-badge text {
+      fill: var(--gold-deep);
+      font-family: Inter, ui-sans-serif, sans-serif;
+      font-size: 7px;
+      font-weight: 850;
+      letter-spacing: 0.02em;
+      text-anchor: middle;
+    }
+
+    .record-road {
+      fill: none;
+      stroke-width: 1.4;
+      vector-effect: non-scaling-stroke;
+    }
+
+    .record-road[data-state="gone"] { stroke: var(--gone); }
+    .record-road[data-state="todo"] {
+      stroke: var(--paper-strong);
+      filter: drop-shadow(0 0 0.8px rgba(24, 61, 53, 0.8));
+    }
+    .record-road[data-state="blocked"] { stroke: var(--blocked); }
+
+    .record-road.is-muted { opacity: 0.1; }
+
+    .path-draft {
+      fill: none;
+      stroke: var(--paper-strong);
+      stroke-width: 3.2;
+      stroke-dasharray: 7 6;
+      stroke-linecap: round;
+      filter: drop-shadow(0 0 1px rgba(24, 61, 53, 0.82)) drop-shadow(0 0 4px rgba(255, 253, 248, 0.72));
+      vector-effect: non-scaling-stroke;
+      animation: path-draft-flow 700ms linear infinite;
+    }
+
+    @keyframes path-draft-flow { to { stroke-dashoffset: -26; } }
+
+    .composer-preview-road .composer-preview-visible {
+      fill: none;
+      stroke-width: 4.2;
+      stroke-linecap: round;
+      filter: drop-shadow(0 0 4px rgba(255, 253, 248, 0.95));
+      pointer-events: none;
+      vector-effect: non-scaling-stroke;
+    }
+
+    .composer-preview-road[data-state="gone"] .composer-preview-visible { stroke: var(--gone); }
+    .composer-preview-road[data-state="todo"] .composer-preview-visible {
+      stroke: var(--paper-strong);
+      stroke-dasharray: 8 7;
+      filter: drop-shadow(0 0 1px rgba(24, 61, 53, 0.82));
+    }
+    .composer-preview-road[data-state="blocked"] .composer-preview-visible { stroke: var(--blocked); stroke-dasharray: 3 7; }
+
+    .blank-press-indicator {
+      position: absolute;
+      z-index: 7;
+      display: none;
+      width: 34px;
+      height: 34px;
+      border: 2px solid var(--todo);
+      border-radius: 50%;
+      background: rgba(208, 146, 52, 0.1);
+      pointer-events: none;
+      transform: translate(-50%, -50%) scale(0.55);
+    }
+
+    .blank-press-indicator.is-active {
+      display: block;
+      animation: blank-hold 560ms linear forwards;
+    }
+
+    @keyframes blank-hold {
+      from { opacity: 0.45; transform: translate(-50%, -50%) scale(0.55); }
+      to { opacity: 1; transform: translate(-50%, -50%) scale(1); box-shadow: 0 0 0 7px rgba(208, 146, 52, 0.12); }
+    }
+
+    .blocker line {
+      stroke: var(--paper-strong);
+      stroke-linecap: round;
+      stroke-width: 1.8;
+      vector-effect: non-scaling-stroke;
+    }
+
+    .blocker circle {
+      fill: var(--blocked);
+      stroke: var(--paper-strong);
+      stroke-width: 1.3;
+      vector-effect: non-scaling-stroke;
+    }
+
+    .map-node {
+      --badge-background: var(--paper-strong);
+      --badge-border: #9daaa4;
+      --badge-color: var(--ink);
+      --badge-shadow: rgba(24, 61, 53, 0.14);
+      position: absolute;
+      padding: 0;
+      border: 0;
+      pointer-events: auto;
+      color: inherit;
+      background: transparent;
+      cursor: grab;
+      font: inherit;
+      transform: scale(var(--map-node-scale)) translate(-50%, -50%);
+      transform-origin: 0 0;
+      touch-action: none;
+      -webkit-tap-highlight-color: transparent;
+      animation: node-in 180ms ease-out both;
+    }
+
+    .map-node[data-item-state="success"] {
+      --badge-background: var(--gone);
+      --badge-border: #326d50;
+      --badge-color: var(--paper-strong);
+      --badge-shadow: rgba(50, 109, 80, 0.24);
+    }
+
+    .map-node[data-item-state="failed"] {
+      --badge-background: var(--blocked);
+      --badge-border: #843a33;
+      --badge-color: var(--paper-strong);
+      --badge-shadow: rgba(132, 58, 51, 0.24);
+    }
+
+    .map-node[data-item-state="todo"] {
+      --badge-background: var(--paper-strong);
+      --badge-border: #879790;
+      --badge-color: var(--ink);
+      --badge-shadow: rgba(24, 61, 53, 0.13);
+    }
+
+    @keyframes node-in {
+      from { opacity: 0; transform: scale(var(--map-node-scale)) translate(-50%, -45%); }
+      to { opacity: 1; transform: scale(var(--map-node-scale)) translate(-50%, -50%); }
+    }
+
+    .map-node:active { cursor: grabbing; }
+
+    .map-node.is-dragging {
+      z-index: 50;
+      filter: drop-shadow(0 11px 12px rgba(24, 61, 53, 0.22));
+    }
+
+    .map-node.is-route-muted { opacity: 0.18 !important; filter: saturate(0.35); }
+
+    .map-node.is-route-node { z-index: 17; }
+
+    .map-node.is-route-node .node-label {
+      border-color: rgba(24, 61, 53, 0.25);
+      box-shadow: 0 3px 10px rgba(24, 61, 53, 0.12);
+    }
+
+    .map-node.is-route-target {
+      z-index: 23;
+      filter: drop-shadow(0 0 4px rgba(255, 253, 248, 0.98)) drop-shadow(0 0 10px rgba(37, 92, 76, 0.7));
+    }
+
+    .map-node.is-route-target .node-label {
+      border-color: var(--forest-deep);
+      color: var(--paper-strong);
+      background: var(--forest-deep);
+      box-shadow: 0 4px 13px rgba(24, 61, 53, 0.26);
+    }
+
+    .node-hit {
+      position: absolute;
+      inset: -11px;
+      border-radius: 50%;
+    }
+
+    .goal-node { width: 54px; height: 54px; }
+
+    .goal-glyph {
+      position: absolute;
+      inset: 3px;
+      display: grid;
+      border: 2px solid var(--badge-border);
+      border-radius: 50%;
+      color: var(--badge-color);
+      background: var(--badge-background);
+      box-shadow: 0 0 0 3px rgba(255, 253, 248, 0.88), 0 7px 17px var(--badge-shadow);
+      place-items: center;
+    }
+
+    .goal-glyph::before {
+      content: "";
+      position: absolute;
+      inset: 5px;
+      border: 1px solid currentColor;
+      border-radius: 50%;
+      opacity: 0.34;
+    }
+
+    .goal-glyph svg {
+      position: relative;
+      width: 23px;
+      height: 23px;
+      fill: none;
+      stroke: currentColor;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+      stroke-width: 2;
+    }
+
+    .task-node { width: 46px; height: 46px; }
+
+    .task-glyph {
+      position: absolute;
+      inset: 5px;
+      display: grid;
+      border: 2px solid var(--badge-border);
+      border-radius: 11px;
+      color: var(--badge-color);
+      background: var(--badge-background);
+      box-shadow: 0 0 0 2px rgba(255, 253, 248, 0.76), 0 6px 14px var(--badge-shadow);
+      place-items: center;
+    }
+
+    .task-glyph svg {
+      width: 22px;
+      height: 22px;
+      fill: none;
+      stroke: currentColor;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+      stroke-width: 2;
+    }
+
+    .status-node { width: 46px; height: 46px; }
+
+    .status-glyph {
+      position: absolute;
+      inset: 5px;
+      display: grid;
+      border: 2px solid var(--badge-border);
+      border-radius: 50%;
+      color: var(--badge-color);
+      background: var(--badge-background);
+      box-shadow: 0 0 0 2px rgba(255, 253, 248, 0.78), 0 6px 14px var(--badge-shadow);
+      place-items: center;
+    }
+
+    .status-glyph svg {
+      width: 23px;
+      height: 23px;
+      fill: none;
+      stroke: currentColor;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+      stroke-width: 1.8;
+    }
+
+    .start-node { width: 46px; height: 46px; }
+
+    .start-glyph {
+      position: absolute;
+      inset: 5px;
+      display: grid;
+      border: 2px solid var(--sage-dark);
+      border-radius: 50%;
+      color: var(--ink);
+      background: var(--paper-strong);
+      box-shadow: 0 5px 13px rgba(24, 61, 53, 0.12);
+      place-items: center;
+    }
+
+    .start-glyph::after {
+      content: "";
+      width: 12px;
+      height: 12px;
+      border: 3px solid var(--paper-strong);
+      border-radius: 50%;
+      background: var(--sage-dark);
+      box-shadow: 0 0 0 1.5px var(--sage-dark);
+    }
+
+    .record-node { width: 34px; height: 34px; }
+
+    .record-glyph {
+      position: absolute;
+      inset: 4px;
+      display: grid;
+      border: 1.5px solid var(--badge-border);
+      border-radius: 7px;
+      color: var(--badge-color);
+      background: var(--badge-background);
+      box-shadow: 0 0 0 2px rgba(255, 253, 248, 0.74), 0 4px 10px var(--badge-shadow);
+      place-items: center;
+    }
+
+    .record-glyph::before {
+      content: "";
+      position: absolute;
+      top: 3px;
+      right: 3px;
+      width: 4px;
+      height: 4px;
+      border-radius: 50%;
+      background: currentColor;
+    }
+
+    .record-glyph svg {
+      width: 17px;
+      height: 17px;
+      fill: none;
+      stroke: currentColor;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+      stroke-width: 1.8;
+    }
+
+    .node-label {
+      position: absolute;
+      top: calc(100% + 3px);
+      left: 50%;
+      width: max-content;
+      max-width: 92px;
+      overflow: hidden;
+      padding: 3px 6px;
+      border: 1px solid rgba(24, 61, 53, 0.08);
+      border-radius: 6px;
+      color: var(--ink);
+      background: rgba(255, 253, 248, 0.91);
+      box-shadow: 0 2px 8px rgba(24, 61, 53, 0.05);
+      font-size: 8px;
+      font-weight: 780;
+      line-height: 1.15;
+      text-align: center;
+      text-overflow: ellipsis;
+      transform: translateX(-50%);
+      white-space: nowrap;
+    }
+
+    .record-node .node-label {
+      top: 2px;
+      left: calc(100% + 1px);
+      max-width: 64px;
+      padding: 2px 4px;
+      color: var(--violet);
+      font-size: 7px;
+      transform: none;
+    }
+
+    .map-node.is-selected .node-label {
+      border-color: rgba(24, 61, 53, 0.24);
+      box-shadow: 0 0 0 2px rgba(255, 253, 248, 0.84), 0 3px 15px rgba(208, 146, 52, 0.38);
+    }
+
+    .map-node.is-selected {
+      z-index: 22;
+      filter: drop-shadow(0 0 4px rgba(255, 253, 248, 0.98)) drop-shadow(0 0 9px rgba(208, 146, 52, 0.7));
+    }
+
+    .map-node.is-selected::before {
+      content: "";
+      position: absolute;
+      top: -8px;
+      left: 50%;
+      width: 3px;
+      height: 3px;
+      border-radius: 50%;
+      background: var(--paper-strong);
+      box-shadow: -19px 11px 0 rgba(255, 253, 248, 0.9), 19px 18px 0 rgba(228, 184, 78, 0.95), 12px 48px 0 rgba(255, 253, 248, 0.9), -16px 43px 0 rgba(228, 184, 78, 0.88);
+      pointer-events: none;
+      animation: selected-node-spark 1.25s ease-in-out infinite;
+    }
+
+    .map-node.is-selected::after {
+      content: "";
+      position: absolute;
+      inset: -4px;
+      border: 2px solid rgba(255, 253, 248, 0.95);
+      border-radius: 50%;
+      box-shadow: 0 0 0 2px rgba(37, 92, 76, 0.3);
+      pointer-events: none;
+      animation: selected-node-ring 1.45s ease-in-out infinite;
+    }
+
+    @keyframes selected-node-ring {
+      0%, 100% { opacity: 0.7; transform: scale(0.96); }
+      50% { opacity: 1; transform: scale(1.08); box-shadow: 0 0 0 4px rgba(228, 184, 78, 0.28); }
+    }
+
+    @keyframes selected-node-spark {
+      0%, 100% { opacity: 0.4; transform: translate(-50%, 2px) rotate(0deg) scale(0.75); }
+      50% { opacity: 1; transform: translate(-50%, -2px) rotate(12deg) scale(1.15); }
+    }
+
+    .task-node.is-selected::after { border-radius: 14px; }
+    .record-node.is-selected::after { inset: 0; border-radius: 10px; }
+
+    .composer-preview-node {
+      z-index: 30;
+      pointer-events: none !important;
+      opacity: 0.96;
+    }
+
+    .map-node.is-preview-source { opacity: 0.16; }
+
+    .map-node.is-path-target::before {
+      content: "";
+      position: absolute;
+      inset: -9px;
+      border: 3px solid rgba(208, 146, 52, 0.78);
+      border-radius: 50%;
+      background: transparent;
+      box-shadow: 0 0 0 5px rgba(208, 146, 52, 0.14);
+      pointer-events: none;
+      animation: none;
+    }
+
+    .path-handle {
+      position: absolute;
+      z-index: 12;
+      top: -14px;
+      right: -13px;
+      display: grid;
+      width: 25px;
+      height: 25px;
+      border: 2px solid var(--paper-strong);
+      border-radius: 50%;
+      color: var(--paper-strong);
+      background: var(--todo);
+      box-shadow: 0 5px 13px rgba(143, 102, 31, 0.28);
+      cursor: crosshair;
+      font-size: 14px;
+      font-weight: 800;
+      line-height: 1;
+      place-items: center;
+      touch-action: none;
+    }
+
+    .map-composer {
+      position: absolute;
+      z-index: 35;
+      width: 226px;
+      padding: 10px;
+      border: 1px solid rgba(24, 61, 53, 0.16);
+      border-radius: 15px;
+      background: rgba(255, 253, 248, 0.98);
+      box-shadow: 0 15px 38px rgba(24, 61, 53, 0.2);
+      backdrop-filter: blur(14px);
+      transform: translate(-50%, -50%);
+      pointer-events: auto;
+    }
+
+    .map-composer[hidden] { display: none; }
+
+    .composer-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      margin-bottom: 8px;
+    }
+
+    .composer-head strong {
+      font-family: Georgia, "Times New Roman", serif;
+      font-size: 14px;
+    }
+
+    .composer-close {
+      display: grid;
+      width: 24px;
+      height: 24px;
+      padding: 0;
+      border: 0;
+      border-radius: 50%;
+      color: var(--muted);
+      background: #efebe2;
+      cursor: pointer;
+      font-size: 14px;
+      place-items: center;
+    }
+
+    .composer-input {
+      width: 100%;
+      height: 38px;
+      padding: 0 9px;
+      border: 1px solid rgba(24, 61, 53, 0.13);
+      border-radius: 9px;
+      outline: none;
+      color: var(--ink);
+      background: #f5f1e8;
+      font: inherit;
+      font-size: 10px;
+    }
+
+    .composer-input:focus { border-color: var(--forest); box-shadow: 0 0 0 3px rgba(37, 92, 76, 0.1); }
+
+    .composer-options {
+      display: flex;
+      gap: 5px;
+      margin-top: 7px;
+    }
+
+    .composer-options[hidden] { display: none; }
+
+    .composer-chip {
+      flex: 1;
+      min-height: 29px;
+      padding: 0 6px;
+      border: 1px solid rgba(24, 61, 53, 0.1);
+      border-radius: 8px;
+      color: var(--muted);
+      background: #f5f1e8;
+      cursor: pointer;
+      font-size: 8px;
+      font-weight: 820;
+    }
+
+    .composer-chip.is-active {
+      border-color: rgba(24, 61, 53, 0.28);
+      color: var(--paper-strong);
+      background: var(--forest);
+    }
+
+    .composer-actions {
+      display: grid;
+      grid-template-columns: 1fr 1.5fr;
+      gap: 6px;
+      margin-top: 8px;
+    }
+
+    .composer-action {
+      min-height: 33px;
+      border: 0;
+      border-radius: 9px;
+      cursor: pointer;
+      font-size: 8px;
+      font-weight: 850;
+    }
+
+    .composer-action.cancel { color: var(--muted); background: #efebe2; }
+    .composer-action.create { color: var(--paper-strong); background: var(--forest); }
+
+    .drag-guide {
+      position: absolute;
+      z-index: 6;
+      right: 12px;
+      display: none;
+      width: max-content;
+      height: auto;
+      pointer-events: none;
+    }
+
+    .drag-guide::after {
+      content: attr(data-label);
+      display: block;
+      padding: 2px 5px;
+      border-radius: 5px;
+      color: var(--paper);
+      background: var(--forest);
+      font-size: 7px;
+      font-weight: 850;
+      letter-spacing: 0.07em;
+      text-transform: uppercase;
+    }
+
+    .drag-guide.is-visible { display: block; }
+
+    .hint {
+      position: absolute;
+      z-index: 18;
+      top: 54px;
+      left: 50%;
+      display: flex;
+      align-items: center;
+      gap: 7px;
+      min-height: 30px;
+      padding: 6px 11px;
+      border: 1px solid rgba(24, 61, 53, 0.1);
+      border-radius: 999px;
+      color: var(--muted);
+      background: rgba(255, 253, 248, 0.9);
+      box-shadow: 0 5px 18px rgba(24, 61, 53, 0.1);
+      backdrop-filter: blur(10px);
+      font-size: 8px;
+      font-weight: 750;
+      transform: translateX(-50%);
+      white-space: nowrap;
+    }
+
+    .mode-switch {
+      position: absolute;
+      z-index: 22;
+      top: 12px;
+      left: 50%;
+      display: grid;
+      width: 164px;
+      height: 34px;
+      grid-template-columns: 1fr 1fr;
+      gap: 3px;
+      padding: 3px;
+      border: 1px solid rgba(24, 61, 53, 0.12);
+      border-radius: 999px;
+      background: rgba(255, 253, 248, 0.94);
+      box-shadow: 0 5px 18px rgba(24, 61, 53, 0.11);
+      backdrop-filter: blur(10px);
+      transform: translateX(-50%);
+    }
+
+    .mode-button {
+      border: 0;
+      border-radius: 999px;
+      color: var(--muted);
+      background: transparent;
+      cursor: pointer;
+      font-size: 8px;
+      font-weight: 850;
+    }
+
+    .mode-button.is-active {
+      color: var(--paper-strong);
+      background: var(--forest);
+      box-shadow: 0 2px 7px rgba(22, 63, 53, 0.22);
+    }
+
+    .hint svg {
+      width: 13px;
+      height: 13px;
+      fill: none;
+      stroke: var(--forest);
+      stroke-linecap: round;
+      stroke-linejoin: round;
+      stroke-width: 1.8;
+    }
+
+    .capture-button {
+      position: absolute;
+      z-index: 20;
+      right: 15px;
+      bottom: 16px;
+      display: flex;
+      align-items: center;
+      min-height: 43px;
+      padding: 0 14px 0 11px;
+      border: 0;
+      border-radius: 999px;
+      color: var(--paper-strong);
+      background: var(--forest-deep);
+      box-shadow: 0 8px 24px rgba(22, 63, 53, 0.28);
+      cursor: pointer;
+      gap: 7px;
+      font-size: 10px;
+      font-weight: 850;
+      -webkit-tap-highlight-color: transparent;
+    }
+
+    .capture-button span:first-child {
+      font-size: 20px;
+      font-weight: 400;
+      line-height: 1;
+    }
+
+    .capture-button:active { transform: scale(0.96); }
+    .capture-button[hidden] { display: none; }
+
+    .viewport-controls {
+      position: absolute;
+      z-index: 20;
+      right: 15px;
+      bottom: 16px;
+      display: grid;
+      width: 120px;
+      height: 43px;
+      grid-template-columns: 36px 48px 36px;
+      overflow: hidden;
+      border: 1px solid rgba(24, 61, 53, 0.12);
+      border-radius: 999px;
+      background: rgba(255, 253, 248, 0.96);
+      box-shadow: 0 7px 22px rgba(24, 61, 53, 0.14);
+      backdrop-filter: blur(10px);
+    }
+
+    .viewport-controls[hidden] { display: none; }
+
+    .viewport-scale-button {
+      padding: 0;
+      border: 0;
+      color: var(--forest);
+      background: transparent;
+      cursor: pointer;
+      font-size: 17px;
+      font-weight: 700;
+    }
+
+    .viewport-scale-button:active { background: #edf2e9; }
+
+    .viewport-scale-value {
+      display: grid;
+      border-right: 1px solid rgba(24, 61, 53, 0.09);
+      border-left: 1px solid rgba(24, 61, 53, 0.09);
+      color: var(--ink);
+      font-size: 8px;
+      font-weight: 900;
+      place-items: center;
+    }
+
+    .zoom-controls {
+      position: absolute;
+      z-index: 20;
+      bottom: 16px;
+      left: 15px;
+      display: grid;
+      grid-template-columns: 37px 67px 37px;
+      height: 43px;
+      overflow: hidden;
+      border: 1px solid rgba(24, 61, 53, 0.12);
+      border-radius: 999px;
+      background: rgba(255, 253, 248, 0.96);
+      box-shadow: 0 7px 22px rgba(24, 61, 53, 0.14);
+      backdrop-filter: blur(10px);
+    }
+
+    .zoom-button {
+      padding: 0;
+      border: 0;
+      color: var(--forest);
+      background: transparent;
+      cursor: pointer;
+      font-size: 20px;
+      font-weight: 500;
+      -webkit-tap-highlight-color: transparent;
+    }
+
+    .zoom-button:disabled {
+      color: #bdc2bb;
+      cursor: default;
+    }
+
+    .zoom-button:not(:disabled):active { background: #edf2e9; }
+
+    .zoom-level {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-direction: column;
+      border-right: 1px solid rgba(24, 61, 53, 0.09);
+      border-left: 1px solid rgba(24, 61, 53, 0.09);
+      line-height: 1;
+      pointer-events: none;
+    }
+
+    .zoom-level strong {
+      margin-bottom: 3px;
+      font-size: 9px;
+      font-weight: 900;
+    }
+
+    .zoom-level span {
+      color: var(--muted);
+      font-size: 7px;
+      font-weight: 780;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+    }
+
+    .route-summary {
+      display: flex;
+      width: 100%;
+      min-width: 0;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .route-summary[hidden] { display: none; }
+    .progress-copy[hidden],
+    .forward-chip[hidden],
+    .hint[hidden] { display: none; }
+
+    .route-summary-icon {
+      display: grid;
+      width: 24px;
+      height: 24px;
+      flex: 0 0 24px;
+      border-radius: 50%;
+      color: var(--paper-strong);
+      background: var(--forest);
+      place-items: center;
+    }
+
+    .route-summary-icon svg {
+      width: 14px;
+      height: 14px;
+      fill: none;
+      stroke: currentColor;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+      stroke-width: 2;
+    }
+
+    .route-summary-copy {
+      min-width: 0;
+      flex: 1;
+      line-height: 1.05;
+    }
+
+    .route-summary-copy strong,
+    .route-summary-copy span {
+      display: block;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .route-summary-copy strong { font-size: 10px; }
+    .route-summary-copy span { margin-top: 3px; color: var(--muted); font-size: 8px; font-weight: 700; }
+
+    .route-clear {
+      width: 25px;
+      height: 25px;
+      flex: 0 0 25px;
+      padding: 0;
+      border: 1px solid rgba(24, 61, 53, 0.1);
+      border-radius: 50%;
+      color: var(--muted);
+      background: var(--paper-strong);
+      cursor: pointer;
+      font-size: 15px;
+    }
+
+    .legend-panel,
+    .detail-sheet,
+    .capture-sheet,
+    .route-sheet {
+      position: absolute;
+      z-index: 40;
+      right: 0;
+      bottom: 0;
+      left: 0;
+      border-top: 1px solid rgba(24, 61, 53, 0.13);
+      border-radius: 24px 24px 0 0;
+      background: rgba(255, 253, 248, 0.98);
+      box-shadow: 0 -18px 50px rgba(24, 61, 53, 0.17);
+      transform: translateY(calc(100% + 24px));
+      transition: transform 260ms cubic-bezier(.2,.8,.2,1);
+    }
+
+    .legend-panel.is-open,
+    .detail-sheet.is-open,
+    .capture-sheet.is-open,
+    .route-sheet.is-open { transform: translateY(0); }
+
+    .legend-panel { padding: 9px 17px 26px; }
+    .detail-sheet { min-height: 214px; padding: 9px 17px 28px; }
+    .capture-sheet { min-height: 310px; padding: 9px 17px 28px; }
+    .route-sheet { min-height: 390px; padding: 9px 17px 28px; }
+
+    .route-origin {
+      display: flex;
+      align-items: center;
+      gap: 9px;
+      margin: 13px 0 8px;
+      padding: 9px 10px;
+      border: 1px solid rgba(24, 61, 53, 0.09);
+      border-radius: 11px;
+      background: #f5f1e8;
+    }
+
+    .route-origin-mark {
+      display: grid;
+      width: 24px;
+      height: 24px;
+      border: 2px solid var(--sage-dark);
+      border-radius: 50%;
+      color: var(--sage-dark);
+      background: var(--paper-strong);
+      font-size: 8px;
+      font-weight: 900;
+      place-items: center;
+    }
+
+    .route-origin-copy { min-width: 0; flex: 1; }
+    .route-origin-copy label { display: block; color: var(--faint); font-size: 7px; font-weight: 850; letter-spacing: 0.08em; text-transform: uppercase; }
+
+    .route-from-select {
+      width: 100%;
+      margin-top: 2px;
+      padding: 0;
+      border: 0;
+      outline: none;
+      color: var(--ink);
+      background: transparent;
+      font: inherit;
+      font-size: 10px;
+      font-weight: 800;
+    }
+
+    .route-search-field {
+      width: 100%;
+      height: 42px;
+      padding: 0 12px;
+      border: 1px solid rgba(24, 61, 53, 0.13);
+      border-radius: 11px;
+      outline: none;
+      color: var(--ink);
+      background: var(--paper-strong);
+      font: inherit;
+      font-size: 11px;
+    }
+
+    .route-search-field:focus { border-color: var(--forest); box-shadow: 0 0 0 3px rgba(37, 92, 76, 0.1); }
+
+    .route-results {
+      display: grid;
+      max-height: 195px;
+      gap: 6px;
+      margin-top: 8px;
+      overflow-y: auto;
+    }
+
+    .route-result {
+      display: grid;
+      grid-template-columns: 30px minmax(0, 1fr) auto;
+      min-height: 46px;
+      align-items: center;
+      gap: 8px;
+      padding: 6px 9px;
+      border: 1px solid rgba(24, 61, 53, 0.09);
+      border-radius: 11px;
+      color: var(--ink);
+      background: #f7f3ea;
+      cursor: pointer;
+      text-align: left;
+    }
+
+    .route-result:active { transform: scale(0.985); }
+
+    .route-result-icon {
+      --result-background: var(--paper-strong);
+      --result-border: #879790;
+      --result-color: var(--ink);
+      display: grid;
+      width: 28px;
+      height: 28px;
+      border: 1.5px solid var(--result-border);
+      border-radius: 9px;
+      color: var(--result-color);
+      background: var(--result-background);
+      font-size: 8px;
+      font-weight: 900;
+      place-items: center;
+      text-transform: uppercase;
+    }
+
+    .route-result-icon svg {
+      width: 17px;
+      height: 17px;
+      fill: none;
+      stroke: currentColor;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+      stroke-width: 2;
+    }
+
+    .route-result[data-type="goal"] .route-result-icon,
+    .route-result[data-type="status"] .route-result-icon { border-radius: 50%; }
+
+    .route-result[data-item-state="success"] .route-result-icon {
+      --result-background: var(--gone);
+      --result-border: #326d50;
+      --result-color: var(--paper-strong);
+    }
+
+    .route-result[data-item-state="failed"] .route-result-icon {
+      --result-background: var(--blocked);
+      --result-border: #843a33;
+      --result-color: var(--paper-strong);
+    }
+
+    .route-result-copy { min-width: 0; }
+    .route-result-copy strong { display: block; overflow: hidden; font-size: 10px; text-overflow: ellipsis; white-space: nowrap; }
+    .route-result-copy span { display: block; margin-top: 3px; color: var(--muted); font-size: 8px; font-weight: 700; }
+    .route-result-arrow { color: var(--sage-dark); font-size: 15px; }
+    .route-empty { padding: 18px 8px; color: var(--muted); font-size: 10px; text-align: center; }
+
+    .sheet-handle {
+      width: 38px;
+      height: 4px;
+      margin: 0 auto 12px;
+      border-radius: 999px;
+      background: #d2cdc2;
+    }
+
+    .sheet-head {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 15px;
+    }
+
+    .sheet-kicker {
+      margin: 0 0 4px;
+      color: var(--sage-dark);
+      font-size: 8px;
+      font-weight: 850;
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+    }
+
+    .sheet-title {
+      margin: 0;
+      font-family: Georgia, "Times New Roman", serif;
+      font-size: 21px;
+      font-weight: 600;
+      letter-spacing: -0.025em;
+      line-height: 1.1;
+    }
+
+    .close-button {
+      display: grid;
+      width: 31px;
+      height: 31px;
+      flex: 0 0 31px;
+      padding: 0;
+      border: 1px solid rgba(24, 61, 53, 0.1);
+      border-radius: 50%;
+      color: var(--muted);
+      background: #f2eee4;
+      cursor: pointer;
+      font-size: 17px;
+      place-items: center;
+    }
+
+    .sheet-copy {
+      margin: 10px 0 13px;
+      color: var(--muted);
+      font-size: 11px;
+      line-height: 1.48;
+    }
+
+    .metadata {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 7px;
+    }
+
+    .meta-card {
+      min-width: 0;
+      padding: 8px 9px;
+      border: 1px solid rgba(24, 61, 53, 0.09);
+      border-radius: 10px;
+      background: #f5f1e8;
+    }
+
+    .meta-card span {
+      display: block;
+      margin-bottom: 3px;
+      color: var(--faint);
+      font-size: 7px;
+      font-weight: 850;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+    }
+
+    .meta-card strong {
+      display: block;
+      overflow: hidden;
+      font-size: 9px;
+      font-weight: 800;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .road-state-button,
+    .detail-edit-button {
+      display: flex;
+      width: 100%;
+      align-items: center;
+      justify-content: space-between;
+      min-height: 42px;
+      margin-top: 12px;
+      padding: 0 12px;
+      border: 1px solid rgba(24, 61, 53, 0.11);
+      border-radius: 11px;
+      color: var(--ink);
+      background: var(--paper-strong);
+      cursor: pointer;
+      font-size: 10px;
+      font-weight: 800;
+    }
+
+    .road-state-button[hidden],
+    .detail-edit-button[hidden] { display: none; }
+
+    .detail-route-button {
+      display: grid;
+      width: 100%;
+      min-height: 48px;
+      grid-template-columns: 27px minmax(0, 1fr) auto;
+      align-items: center;
+      gap: 9px;
+      margin-top: 12px;
+      padding: 0 12px;
+      border: 0;
+      border-radius: 12px;
+      color: var(--paper-strong);
+      background: var(--forest-deep);
+      box-shadow: 0 7px 17px rgba(22, 63, 53, 0.18);
+      cursor: pointer;
+      text-align: left;
+    }
+
+    .detail-route-button[hidden] { display: none; }
+
+    .detail-route-icon {
+      display: grid;
+      width: 26px;
+      height: 26px;
+      border-radius: 50%;
+      color: var(--forest-deep);
+      background: var(--paper-strong);
+      place-items: center;
+    }
+
+    .detail-route-icon svg {
+      width: 16px;
+      height: 16px;
+      fill: none;
+      stroke: currentColor;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+      stroke-width: 2;
+    }
+
+    .detail-route-copy strong,
+    .detail-route-copy small { display: block; }
+    .detail-route-copy strong { font-size: 10px; font-weight: 860; }
+    .detail-route-copy small { margin-top: 2px; color: rgba(255, 253, 248, 0.68); font-size: 7px; font-weight: 720; }
+    .detail-route-arrow { font-size: 18px; }
+
+    .detail-add-button {
+      display: grid;
+      width: 100%;
+      min-height: 44px;
+      grid-template-columns: 24px minmax(0, 1fr) auto;
+      align-items: center;
+      gap: 8px;
+      margin-top: 12px;
+      padding: 0 12px;
+      border: 0;
+      border-radius: 11px;
+      color: var(--paper-strong);
+      background: var(--forest);
+      cursor: pointer;
+      font-size: 10px;
+      font-weight: 850;
+      text-align: left;
+    }
+
+    .detail-add-button[hidden] { display: none; }
+
+    .detail-add-icon {
+      display: grid;
+      width: 22px;
+      height: 22px;
+      border-radius: 50%;
+      color: var(--forest);
+      background: var(--paper-strong);
+      font-size: 15px;
+      place-items: center;
+    }
+
+    .detail-add-arrow { font-size: 16px; font-weight: 600; }
+
+    .detail-delete-button {
+      display: flex;
+      width: 100%;
+      min-height: 42px;
+      align-items: center;
+      justify-content: center;
+      gap: 7px;
+      margin-top: 12px;
+      padding: 0 12px;
+      border: 1px solid rgba(173, 80, 69, 0.26);
+      border-radius: 11px;
+      color: var(--blocked);
+      background: rgba(173, 80, 69, 0.07);
+      cursor: pointer;
+      font-size: 10px;
+      font-weight: 800;
+    }
+
+    .detail-delete-button[hidden] { display: none; }
+
+    .detail-delete-button.is-armed {
+      border-color: var(--blocked);
+      color: var(--paper-strong);
+      background: var(--blocked);
+    }
+
+    .detail-delete-icon { font-size: 15px; line-height: 1; }
+
+    .state-preview {
+      width: 46px;
+      border-top: 3px solid var(--gone);
+      border-radius: 99px;
+    }
+
+    .state-preview.todo {
+      border-color: var(--paper-strong);
+      border-top-style: dashed;
+      filter: drop-shadow(0 0 0.8px rgba(24, 61, 53, 0.82));
+    }
+    .state-preview.blocked { border-color: var(--blocked); border-top-style: dotted; }
+
+    .zoom-preview {
+      display: grid;
+      width: 25px;
+      height: 25px;
+      border-radius: 50%;
+      color: var(--paper-strong);
+      background: var(--forest);
+      font-size: 17px;
+      font-weight: 500;
+      place-items: center;
+    }
+
+    .legend-copy {
+      margin: 0 0 12px;
+      color: var(--muted);
+      font-size: 10px;
+      line-height: 1.45;
+    }
+
+    .legend-section-title {
+      margin: 12px 0 7px;
+      color: var(--faint);
+      font-size: 7px;
+      font-weight: 900;
+      letter-spacing: 0.13em;
+      text-transform: uppercase;
+    }
+
+    .filter-row {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 7px;
+    }
+
+    .filter-button {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 39px;
+      padding: 0 7px;
+      border: 1px solid rgba(24, 61, 53, 0.1);
+      border-radius: 10px;
+      color: var(--muted);
+      background: #f5f1e8;
+      cursor: pointer;
+      gap: 6px;
+      font-size: 8px;
+      font-weight: 850;
+    }
+
+    .filter-button::before {
+      content: "";
+      width: 19px;
+      border-top: 3px solid var(--state-color);
+      border-radius: 99px;
+    }
+
+    .filter-button[data-state="gone"] { --state-color: var(--gone); }
+    .filter-button[data-state="todo"] { --state-color: var(--paper-strong); }
+    .filter-button[data-state="blocked"] { --state-color: var(--blocked); }
+    .filter-button[data-state="todo"]::before {
+      border-top-style: dashed;
+      filter: drop-shadow(0 0 0.8px rgba(24, 61, 53, 0.82));
+    }
+    .filter-button[data-state="blocked"]::before { border-top-style: dotted; }
+
+    .filter-button.is-active {
+      border-color: rgba(24, 61, 53, 0.24);
+      color: var(--ink);
+      background: var(--paper-strong);
+      box-shadow: 0 3px 9px rgba(24, 61, 53, 0.07);
+    }
+
+    .item-state-key {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 7px;
+    }
+
+    .item-state-key div {
+      display: flex;
+      min-height: 34px;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      border: 1px solid rgba(24, 61, 53, 0.09);
+      border-radius: 10px;
+      color: var(--muted);
+      background: #f5f1e8;
+      font-size: 8px;
+      font-weight: 820;
+    }
+
+    .item-state-swatch {
+      width: 15px;
+      height: 15px;
+      border: 1.5px solid #879790;
+      border-radius: 5px;
+      background: var(--paper-strong);
+    }
+
+    .item-state-swatch.success { border-color: #326d50; background: var(--gone); }
+    .item-state-swatch.failed { border-color: #843a33; background: var(--blocked); }
+
+    .legend-stats {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 7px;
+    }
+
+    .legend-stat {
+      padding: 9px 10px;
+      border: 1px solid rgba(24, 61, 53, 0.09);
+      border-radius: 10px;
+      background: #f5f1e8;
+    }
+
+    .legend-stat strong {
+      display: block;
+      margin-bottom: 2px;
+      font-family: Georgia, "Times New Roman", serif;
+      font-size: 15px;
+    }
+
+    .legend-stat span {
+      color: var(--muted);
+      font-size: 8px;
+      font-weight: 700;
+    }
+
+    .reset-layout {
+      width: 100%;
+      min-height: 40px;
+      margin-top: 10px;
+      border: 1px solid rgba(24, 61, 53, 0.13);
+      border-radius: 10px;
+      color: var(--forest);
+      background: var(--paper-strong);
+      cursor: pointer;
+      font-size: 9px;
+      font-weight: 850;
+    }
+
+    .field-label {
+      display: block;
+      margin: 13px 0 6px;
+      color: var(--muted);
+      font-size: 8px;
+      font-weight: 850;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+    }
+
+    .target-select,
+    .record-input {
+      width: 100%;
+      min-height: 43px;
+      border: 1px solid rgba(24, 61, 53, 0.13);
+      border-radius: 11px;
+      outline: none;
+      color: var(--ink);
+      background: #f6f2e9;
+      font: inherit;
+      font-size: 11px;
+    }
+
+    .target-select { padding: 0 11px; }
+    .record-input { padding: 11px; resize: none; }
+    .target-select:focus,
+    .record-input:focus { border-color: var(--forest); box-shadow: 0 0 0 3px rgba(37, 92, 76, 0.1); }
+
+    .save-record {
+      width: 100%;
+      min-height: 44px;
+      margin-top: 12px;
+      border: 0;
+      border-radius: 12px;
+      color: var(--paper-strong);
+      background: var(--forest);
+      cursor: pointer;
+      font-size: 10px;
+      font-weight: 850;
+    }
+
+    .toast {
+      position: absolute;
+      z-index: 70;
+      top: 142px;
+      left: 50%;
+      max-width: calc(100% - 32px);
+      padding: 8px 12px;
+      border-radius: 999px;
+      color: var(--paper-strong);
+      background: rgba(22, 63, 53, 0.92);
+      box-shadow: 0 7px 18px rgba(22, 63, 53, 0.18);
+      font-size: 9px;
+      font-weight: 780;
+      opacity: 0;
+      pointer-events: none;
+      transform: translate(-50%, -8px);
+      transition: opacity 180ms ease, transform 180ms ease;
+      white-space: nowrap;
+    }
+
+    .toast.is-visible { opacity: 1; transform: translate(-50%, 0); }
+
+    @media (max-width: 520px) {
+      .page { display: block; padding: 0; }
+      .device {
+        width: 100%;
+        height: 100dvh;
+        min-height: 620px;
+        border: 0;
+        border-radius: 0;
+        box-shadow: none;
+      }
+      .status-bar { padding-top: max(9px, env(safe-area-inset-top)); height: calc(32px + env(safe-area-inset-top)); }
+      .app-header { top: calc(32px + env(safe-area-inset-top)); }
+      .map-shell { top: calc(128px + env(safe-area-inset-top)); }
+      .capture-button { bottom: calc(16px + env(safe-area-inset-bottom)); }
+      .zoom-controls { bottom: calc(16px + env(safe-area-inset-bottom)); }
+      .hint { top: 54px; }
+      .legend-panel,
+      .detail-sheet,
+      .capture-sheet,
+      .route-sheet { padding-bottom: calc(28px + env(safe-area-inset-bottom)); }
+    }
+
+    @media (max-height: 730px) {
+      .app-header { height: 88px; }
+      .map-shell { top: 120px; }
+      .map-summary { margin-top: 7px; }
+      .hint { display: none; }
+      .capture-button { bottom: 17px; }
+      .zoom-controls { bottom: 17px; }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      *, *::before, *::after {
+        scroll-behavior: auto !important;
+        transition-duration: 0.01ms !important;
+        animation-duration: 0.01ms !important;
+        animation-iteration-count: 1 !important;
+      }
+    }
+  </style>
+</head>
+<body>
+  <main class="page">
+    <section class="device" aria-label="Becoming Life Map prototype">
+      <div class="status-bar" aria-hidden="true">
+        <span>9:41</span>
+        <span class="system-icons">
+          <span class="signal"><i></i><i></i><i></i><i></i></span>
+          <svg width="13" height="10" viewBox="0 0 13 10"><path d="M1 3.5C4.2.4 8.8.4 12 3.5M3.2 5.8a4.8 4.8 0 0 1 6.6 0M5.4 8a1.6 1.6 0 0 1 2.2 0" fill="none" stroke="currentColor" stroke-linecap="round" stroke-width="1.2"/></svg>
+          <span class="battery"></span>
+        </span>
+      </div>
+
+      <header class="app-header">
+        <div class="header-row">
+          <div class="brand">
+            <span class="brand-mark" aria-hidden="true"></span>
+            <div class="brand-copy">
+              <span class="eyebrow">Life map</span>
+              <h1>Where I’m going</h1>
+            </div>
+          </div>
+          <div class="header-actions">
+            <button class="round-button" id="routeSearchButton" aria-label="Find a road from Start" title="Find a road">
+              <svg viewBox="0 0 24 24"><circle cx="10.5" cy="10.5" r="5.5"/><path d="m15 15 4 4"/></svg>
+            </button>
+            <button class="round-button" id="resetButton" aria-label="Reset map layout" title="Reset layout">
+              <svg viewBox="0 0 24 24"><path d="M4 8V4m0 0h4M4 4l4 4a7 7 0 1 1-1.5 7.5"/></svg>
+            </button>
+            <button class="round-button" id="legendButton" aria-label="Open road legend" title="Road legend">
+              <svg viewBox="0 0 24 24"><path d="M5 7h14M5 12h14M5 17h14"/><circle cx="8" cy="7" r="1.6" fill="currentColor" stroke="none"/><circle cx="15" cy="12" r="1.6" fill="currentColor" stroke="none"/><circle cx="10" cy="17" r="1.6" fill="currentColor" stroke="none"/></svg>
+            </button>
+          </div>
+        </div>
+        <div class="map-summary">
+          <div class="progress-copy" id="defaultProgressSummary">
+            <div class="progress-track" aria-label="Marathon road segment progress"><span></span></div>
+            <span>Marathon road · 4 segments</span>
+          </div>
+          <span class="forward-chip" id="defaultForwardSummary"><b>↑</b> Forward</span>
+          <div class="route-summary" id="routeSummary" hidden>
+            <span class="route-summary-icon"><svg viewBox="0 0 24 24"><path d="M5 18c4 0 3-12 7-12s3 12 7 12"/><path d="m16 15 3 3 3-3"/></svg></span>
+            <span class="route-summary-copy"><strong id="routeSummaryTitle">Start → Goal</strong><span id="routeSummaryMeta">4 connections · 1 failed endpoint</span></span>
+            <button class="route-clear" id="routeClearButton" type="button" aria-label="Clear shown road">×</button>
+          </div>
+        </div>
+      </header>
+
+      <section class="map-shell" aria-label="Interactive road map. Forward is toward the top.">
+        <div class="map-canvas" id="mapCanvas">
+          <svg class="roads" viewBox="0 0 390 720" preserveAspectRatio="none" aria-label="Road connections">
+            <defs>
+              <marker id="arrow-gone" viewBox="0 0 8 8" refX="6.5" refY="4" markerWidth="4.5" markerHeight="4.5" orient="auto-start-reverse"><path d="M0 0 8 4 0 8Z" fill="#4f8967"/></marker>
+              <marker id="arrow-todo" viewBox="0 0 8 8" refX="6.5" refY="4" markerWidth="4.5" markerHeight="4.5" orient="auto-start-reverse"><path d="M0 0 8 4 0 8Z" fill="#fffdf8" stroke="#879790" stroke-width="0.8"/></marker>
+              <marker id="arrow-blocked" viewBox="0 0 8 8" refX="6.5" refY="4" markerWidth="4.5" markerHeight="4.5" orient="auto-start-reverse"><path d="M0 0 8 4 0 8Z" fill="#ad5045"/></marker>
+            </defs>
+            <g id="segmentCorridorLayer"></g>
+            <g id="roadLayer"></g>
+            <g id="segmentBadgeLayer"></g>
+            <g id="recordRoadLayer"></g>
+            <g id="pathDraftLayer"></g>
+          </svg>
+          <div class="drag-guide" id="dragGuide" data-label="Depth"></div>
+          <div class="blank-press-indicator" id="blankPressIndicator" aria-hidden="true"></div>
+          <div class="node-layer" id="nodeLayer"></div>
+          <div class="map-composer" id="mapComposer" hidden>
+            <div class="composer-head">
+              <strong id="composerTitle">New node</strong>
+              <button class="composer-close" id="composerClose" type="button" aria-label="Cancel new node">×</button>
+            </div>
+            <input class="composer-input" id="composerInput" type="text" maxlength="36" placeholder="Name this node">
+            <div class="composer-options" aria-label="New node type">
+              <button class="composer-chip is-active" data-composer-type="task" type="button">Task</button>
+              <button class="composer-chip" data-composer-type="status" type="button">Status</button>
+              <button class="composer-chip" data-composer-type="goal" type="button">Goal</button>
+            </div>
+            <div class="composer-options" id="composerStateOptions" aria-label="New endpoint outcome">
+              <button class="composer-chip is-active" data-composer-state="todo" type="button">Todo</button>
+              <button class="composer-chip" data-composer-state="gone" type="button">Successful</button>
+              <button class="composer-chip" data-composer-state="blocked" type="button">Failed</button>
+            </div>
+            <div class="composer-actions">
+              <button class="composer-action cancel" id="composerCancel" type="button">Cancel</button>
+              <button class="composer-action create" id="composerCreate" type="button">Create here</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="mode-switch" role="group" aria-label="Map interaction mode">
+          <button class="mode-button is-active" type="button" data-map-mode="visual" aria-pressed="true">Visual</button>
+          <button class="mode-button" type="button" data-map-mode="edit" aria-pressed="false">Edit</button>
+        </div>
+        <div class="zoom-controls" aria-label="Semantic zoom controls">
+          <button class="zoom-button" id="zoomOutButton" aria-label="Move to the parent segment layer">−</button>
+          <div class="zoom-level" aria-live="polite">
+            <strong id="zoomLevelName">Layer 0</strong>
+            <span id="zoomLayerCount">1 parent segment</span>
+          </div>
+          <button class="zoom-button" id="zoomInButton" aria-label="Move to the child segment layer">＋</button>
+        </div>
+        <div class="viewport-controls" id="viewportControls" aria-label="Semantic visual zoom controls">
+          <button class="viewport-scale-button" id="viewportZoomOutButton" type="button" aria-label="Show less detail and scale down">−</button>
+          <span class="viewport-scale-value" id="viewportScaleValue" aria-live="polite">100%</span>
+          <button class="viewport-scale-button" id="viewportZoomInButton" type="button" aria-label="Show more detail and scale up">＋</button>
+        </div>
+        <button class="capture-button" id="captureButton" hidden><span>＋</span><span>Add record</span></button>
+        <div class="hint" id="hint">
+          <svg viewBox="0 0 24 24"><path d="M8 11V7a2 2 0 1 1 4 0v4-2a2 2 0 1 1 4 0v3-1a2 2 0 1 1 4 0v5c0 3-2 5-5 5h-3c-2 0-3.5-1-4.5-2.5L4 13a2 2 0 0 1 3-2l1 1"/></svg>
+          <span id="hintCopy">Pinch or tap ＋ to reveal more detail</span>
+        </div>
+      </section>
+
+      <aside class="legend-panel" id="legendPanel" aria-hidden="true">
+        <div class="sheet-handle"></div>
+        <div class="sheet-head">
+          <div>
+            <p class="sheet-kicker">Map key</p>
+            <h2 class="sheet-title">Roads contain segments</h2>
+          </div>
+          <button class="close-button" data-close="legendPanel" aria-label="Close legend">×</button>
+        </div>
+        <p class="legend-copy">Every connection takes the outcome color of its endpoint. A collapsed edge is divided into equal sections so each hidden endpoint keeps its own color.</p>
+        <p class="legend-section-title">Endpoint color</p>
+        <div class="filter-row">
+          <button class="filter-button is-active" data-state="gone">Successful</button>
+          <button class="filter-button is-active" data-state="todo">Todo</button>
+          <button class="filter-button is-active" data-state="blocked">Failed</button>
+        </div>
+        <p class="legend-section-title">Item outcome</p>
+        <div class="item-state-key" aria-label="Item outcome colors">
+          <div><span class="item-state-swatch success"></span>Successful</div>
+          <div><span class="item-state-swatch failed"></span>Failed</div>
+          <div><span class="item-state-swatch"></span>Todo</div>
+        </div>
+        <p class="legend-section-title">Layout rule</p>
+        <div class="legend-stats">
+          <div class="legend-stat"><strong id="visibleLayerStat">Layer 0</strong><span>Current segment hierarchy layer</span></div>
+          <div class="legend-stat"><strong>＋ Zoom</strong><span>Descend into child segments</span></div>
+          <div class="legend-stat"><strong>↑ Top</strong><span>Forward direction</span></div>
+          <div class="legend-stat"><strong>Start</strong><span>Permanent first road node</span></div>
+        </div>
+        <button class="reset-layout" id="sheetResetButton">Restore equal-spaced layout</button>
+      </aside>
+
+      <aside class="route-sheet" id="routeSheet" aria-hidden="true">
+        <div class="sheet-handle"></div>
+        <div class="sheet-head">
+          <div>
+            <p class="sheet-kicker">Directions</p>
+            <h2 class="sheet-title">Find a road</h2>
+          </div>
+          <button class="close-button" data-close="routeSheet" aria-label="Close route search">×</button>
+        </div>
+        <div class="route-origin">
+          <span class="route-origin-mark">A</span>
+          <div class="route-origin-copy">
+            <label for="routeFromSelect">From</label>
+            <select class="route-from-select" id="routeFromSelect" aria-label="Choose route starting node"></select>
+          </div>
+        </div>
+        <label class="field-label" for="routeSearchInput">To</label>
+        <input class="route-search-field" id="routeSearchInput" type="search" autocomplete="off" placeholder="Search a task, status, or goal" aria-label="Search destination">
+        <div class="route-results" id="routeResults" aria-live="polite"></div>
+      </aside>
+
+      <aside class="detail-sheet" id="detailSheet" aria-hidden="true">
+        <div class="sheet-handle"></div>
+        <div class="sheet-head">
+          <div>
+            <p class="sheet-kicker" id="detailKicker">Goal · Landmark</p>
+            <h2 class="sheet-title" id="detailTitle">Build a healthy rhythm</h2>
+          </div>
+          <button class="close-button" data-close="detailSheet" aria-label="Close details">×</button>
+        </div>
+        <p class="sheet-copy" id="detailCopy">A visible landmark that the road is moving toward.</p>
+        <div class="metadata" id="detailMetadata"></div>
+        <button class="detail-route-button" id="detailRouteButton" type="button" hidden>
+          <span class="detail-route-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><circle cx="6" cy="18" r="2.5"/><path d="M8.5 18h2.2c5.8 0 1.9-11 7.3-11h1.5M16.5 4l3 3-3 3"/></svg></span>
+          <span class="detail-route-copy"><strong>Go to here</strong><small id="detailRouteMeta">Route from Started here</small></span>
+          <span class="detail-route-arrow">›</span>
+        </button>
+        <button class="detail-add-button" id="detailAddButton" type="button" hidden>
+          <span class="detail-add-icon">＋</span>
+          <span id="detailAddLabel">Add node</span>
+          <span class="detail-add-arrow">›</span>
+        </button>
+        <button class="detail-edit-button" id="detailEditButton" type="button" hidden>
+          <span id="detailEditLabel">Edit node</span>
+          <span class="detail-add-arrow">›</span>
+        </button>
+        <button class="road-state-button" id="roadStateButton" hidden>
+          <span>Tap to change endpoint outcome</span>
+          <span class="state-preview" id="statePreview"></span>
+        </button>
+        <button class="detail-delete-button" id="detailDeleteButton" type="button" hidden>
+          <span class="detail-delete-icon" aria-hidden="true">×</span>
+          <span id="detailDeleteLabel">Delete node</span>
+        </button>
+      </aside>
+
+      <aside class="capture-sheet" id="captureSheet" aria-hidden="true">
+        <div class="sheet-handle"></div>
+        <div class="sheet-head">
+          <div>
+            <p class="sheet-kicker">New record</p>
+            <h2 class="sheet-title">What happened?</h2>
+          </div>
+          <button class="close-button" data-close="captureSheet" aria-label="Close record form">×</button>
+        </div>
+        <label class="field-label" for="recordTarget">Related task or goal</label>
+        <select class="target-select" id="recordTarget"></select>
+        <label class="field-label" for="recordText">Short reflection</label>
+        <textarea class="record-input" id="recordText" rows="3" placeholder="e.g. Ran for 20 minutes — pace felt easier today"></textarea>
+        <button class="save-record" id="saveRecordButton">Attach record to the map</button>
+      </aside>
+
+      <div class="toast" id="toast" role="status"></div>
+    </section>
+  </main>
+
+  <script>
+    const DESIGN = { width: 390, height: 720 };
+    const LAYERS = [640, 568.75, 497.5, 426.25, 355, 283.75, 212.5, 141.25, 70];
+    const ZOOM_STAGES = [
+      { name: 'Layer 0', segmentLevel: 0, layers: [0, 8], records: false, hint: 'Parent road segments · zoom in to descend the hierarchy' },
+      { name: 'Layer 1', segmentLevel: 1, layers: [0, 1, 2, 7, 8], records: false, hint: 'Child segments · zoom in to reveal their contained structure' },
+      { name: 'Layer 2', segmentLevel: 2, layers: [0, 1, 2, 3, 4, 5, 6, 7, 8], records: false, hint: 'Milestone segments · their contained nodes are visible' },
+      { name: 'Layer 3', segmentLevel: 3, layers: [0, 1, 2, 3, 4, 5, 6, 7, 8], records: false, hint: 'Node-group segments · branches inside each milestone are visible' },
+      { name: 'Layer 4', segmentLevel: 4, layers: [0, 1, 2, 3, 4, 5, 6, 7, 8], records: true, hint: 'Atomic segments · each connection and its related records are visible' }
+    ];
+
+    const originalNodes = [
+      { id: 'start', type: 'start', title: 'Started here', x: 195, y: 640, layer: 0, description: 'The permanent origin of this journey — where the road toward the goal began.' },
+      { id: 'choose', type: 'task', title: 'Choose a focus', x: 45, y: 568.75, layer: 1, description: 'Name the area that matters most before moving forward.' },
+      { id: 'plan-home', type: 'task', title: 'Make family time', x: 195, y: 568.75, layer: 1, description: 'Reserve dependable time for the people who matter most.' },
+      { id: 'explore-kyoto', type: 'task', title: 'Explore Kyoto move', x: 345, y: 568.75, layer: 1, description: 'An isolated idea waiting to be connected to a road.' },
+      { id: 'health-route', type: 'task', title: 'Build consistency', x: 55, y: 497.5, layer: 2, description: 'Create a repeatable weekly health rhythm.' },
+      { id: 'family-route', type: 'status', title: 'Calendar aligned', x: 195, y: 497.5, layer: 2, description: 'A checkpoint showing that shared family time is now protected.' },
+      { id: 'work-route', type: 'task', title: 'Shape my practice', x: 335, y: 497.5, layer: 2, description: 'Turn creative work into a deliberate practice.' },
+      { id: 'base-mileage', type: 'task', title: 'Build weekly base', x: 55, y: 426.25, layer: 3, description: 'Increase weekly distance slowly enough to keep training sustainable.' },
+      { id: 'run', type: 'task', title: 'Run three times', x: 35, y: 355, layer: 4, description: 'Complete three comfortable runs each week.' },
+      { id: 'sleep', type: 'task', title: 'Protect sleep', x: 115, y: 355, layer: 4, description: 'Keep a consistent wind-down and bedtime.' },
+      { id: 'weekly-dinner', type: 'task', title: 'Weekly dinner', x: 195, y: 355, layer: 4, description: 'Share one unhurried meal together every week.' },
+      { id: 'portfolio', type: 'task', title: 'Publish a case study', x: 275, y: 355, layer: 4, description: 'Show the thinking behind one meaningful project.' },
+      { id: 'interviews', type: 'task', title: 'Talk to designers', x: 355, y: 355, layer: 4, description: 'Learn from three designers doing the work I admire.' },
+      { id: 'ten-k-checkpoint', type: 'status', title: '10K checkpoint', x: 55, y: 283.75, layer: 5, description: 'A measured checkpoint confirming the endurance base is working.' },
+      { id: 'half-marathon-plan', type: 'task', title: 'Prepare for 21K', x: 55, y: 212.5, layer: 6, description: 'Follow a focused block that builds safely toward half-marathon distance.' },
+      { id: 'health', type: 'goal', title: 'Healthy rhythm', x: 55, y: 141.25, layer: 7, description: 'A stable rhythm where energy and movement feel natural.' },
+      { id: 'connected-home', type: 'goal', title: 'Connected home', x: 195, y: 141.25, layer: 7, description: 'A home rhythm with enough space for shared experiences.' },
+      { id: 'work', type: 'goal', title: 'Trusted designer', x: 335, y: 141.25, layer: 7, description: 'Become known for thoughtful work and dependable craft.' },
+      { id: 'marathon', type: 'goal', title: 'Finish a marathon', x: 35, y: 70, layer: 8, description: 'The destination at the top of a deep, eight-segment training road.' },
+      { id: 'family-trip', type: 'goal', title: 'Take a family trip', x: 141.667, y: 70, layer: 8, description: 'A landmark made possible by a stronger shared rhythm.' },
+      { id: 'studio', type: 'goal', title: 'Lead a small studio', x: 248.333, y: 70, layer: 8, description: 'The destination at the top of the creative work road.' },
+      { id: 'move-kyoto', type: 'goal', title: 'Live in Kyoto', x: 355, y: 70, layer: 8, description: 'An isolated landmark that can be connected from an existing node.' },
+      { id: 'record-run', type: 'record', title: '20 min run', x: 12, y: 394, targetId: 'run', description: 'Ran for 20 minutes. Breathing felt easier than last week.' },
+      { id: 'record-sleep', type: 'record', title: '7h 40m', x: 105, y: 397, targetId: 'sleep', description: 'Slept 7h 40m and woke up before the alarm.' },
+      { id: 'record-dinner', type: 'record', title: 'Phones away', x: 191, y: 397, targetId: 'weekly-dinner', description: 'Everyone put their phones away and stayed at the table longer.' },
+      { id: 'record-work', type: 'record', title: 'First draft', x: 252, y: 394, targetId: 'portfolio', description: 'Finished the first narrative draft of the case study.' },
+      { id: 'record-interviews', type: 'record', title: '2 replies', x: 366, y: 396, targetId: 'interviews', description: 'Two designers replied and one conversation is booked.' },
+      { id: 'record-base', type: 'record', title: '28 km week', x: 78, y: 457, targetId: 'base-mileage', description: 'Completed a 28 km training week while keeping every run comfortable.' },
+      { id: 'record-half', type: 'record', title: 'First 18K', x: 82, y: 244, targetId: 'half-marathon-plan', description: 'Completed the first 18 km long run and recovered well the next day.' },
+      { id: 'record-goal', type: 'record', title: 'Energy +', x: 78, y: 174, targetId: 'health', description: 'Energy has been more stable across the last two weeks.' },
+      { id: 'record-home', type: 'record', title: 'Sunday walk', x: 198, y: 178, targetId: 'connected-home', description: 'Took a long Sunday walk together without making other plans.' },
+      { id: 'record-marathon', type: 'record', title: 'Registered', x: 20, y: 108, targetId: 'marathon', description: 'Registered for the autumn marathon and committed to the full training cycle.' },
+      { id: 'record-studio', type: 'record', title: 'Referral', x: 268, y: 108, targetId: 'studio', description: 'A past client referred the studio to a new team.' }
+    ];
+
+    const roadModels = [
+      {
+        id: 'marathon-road',
+        title: 'Marathon road',
+        goalId: 'marathon',
+        rootSegmentId: 'marathon-journey',
+        featured: true,
+        description: 'A complete road made from nested training segments that move upward to the marathon landmark.'
+      },
+      {
+        id: 'family-road',
+        title: 'Family road',
+        goalId: 'family-trip',
+        rootSegmentId: 'family-journey',
+        description: 'A road composed of direction, shared-practice, and landmark segments.'
+      },
+      {
+        id: 'studio-road',
+        title: 'Studio road',
+        goalId: 'studio',
+        rootSegmentId: 'studio-journey',
+        description: 'A road composed of direction, craft-practice, and landmark segments.'
+      }
+    ];
+
+    const roadSegments = [
+      {
+        id: 'marathon-journey',
+        roadId: 'marathon-road',
+        title: 'Marathon journey',
+        level: 0,
+        parentId: null,
+        childIds: ['marathon-direction', 'marathon-foundation', 'marathon-distance', 'marathon-readiness'],
+        nodeIds: ['start', 'choose', 'health-route', 'base-mileage', 'run', 'sleep', 'ten-k-checkpoint', 'half-marathon-plan', 'health', 'marathon'],
+        connectionIds: ['r1', 'r2', 'r4', 'r5', 'r21', 'r8', 'r9', 'r22', 'r23', 'r12'],
+        labelX: 116,
+        labelY: 326,
+        description: 'The parent segment contains four ordered child segments and all nodes on the marathon road.'
+      },
+      {
+        id: 'marathon-direction',
+        roadId: 'marathon-road',
+        title: 'Direction',
+        level: 1,
+        parentId: 'marathon-journey',
+        childIds: ['marathon-intent', 'marathon-entry'],
+        nodeIds: ['start', 'choose', 'health-route'],
+        connectionIds: ['r1', 'r2'],
+        labelX: 112,
+        labelY: 527,
+        tone: 'foundation',
+        description: 'Choose the health direction and enter the marathon road.'
+      },
+      {
+        id: 'marathon-foundation',
+        roadId: 'marathon-road',
+        title: 'Foundation',
+        level: 1,
+        parentId: 'marathon-journey',
+        childIds: ['marathon-weekly-base', 'marathon-10k-gate'],
+        nodeIds: ['health-route', 'base-mileage', 'run', 'sleep', 'ten-k-checkpoint'],
+        connectionIds: ['r4', 'r5', 'r21', 'r8', 'r9'],
+        labelX: 158,
+        labelY: 391,
+        tone: 'foundation',
+        description: 'One segment contains five nodes, including two parallel practice nodes and a status checkpoint.'
+      },
+      {
+        id: 'marathon-distance',
+        roadId: 'marathon-road',
+        title: 'Distance',
+        level: 1,
+        parentId: 'marathon-journey',
+        childIds: ['marathon-21k-build'],
+        nodeIds: ['ten-k-checkpoint', 'half-marathon-plan', 'health'],
+        connectionIds: ['r22', 'r23'],
+        labelX: 125,
+        labelY: 247,
+        tone: 'distance',
+        description: 'Progress from the 10K checkpoint through a 21K preparation task into a stable rhythm.'
+      },
+      {
+        id: 'marathon-readiness',
+        roadId: 'marathon-road',
+        title: 'Readiness',
+        level: 1,
+        parentId: 'marathon-journey',
+        childIds: ['marathon-finish-line'],
+        nodeIds: ['health', 'marathon'],
+        connectionIds: ['r12'],
+        labelX: 111,
+        labelY: 105,
+        tone: 'readiness',
+        description: 'The final segment connects the established health rhythm to the marathon landmark.'
+      },
+      {
+        id: 'family-journey',
+        roadId: 'family-road',
+        title: 'Family journey',
+        level: 0,
+        parentId: null,
+        childIds: ['family-direction', 'family-practice', 'family-landmark'],
+        nodeIds: ['start', 'plan-home', 'family-route', 'weekly-dinner', 'connected-home', 'family-trip'],
+        connectionIds: ['r14', 'r15', 'r16', 'r17', 'r18'],
+        labelX: 192,
+        labelY: 326,
+        description: 'The parent segment contains three ordered child segments on the family road.'
+      },
+      {
+        id: 'family-direction',
+        roadId: 'family-road',
+        title: 'Direction',
+        level: 1,
+        parentId: 'family-journey',
+        childIds: ['family-time-entry'],
+        nodeIds: ['start', 'plan-home', 'family-route'],
+        connectionIds: ['r14', 'r15'],
+        labelX: 246,
+        labelY: 527,
+        tone: 'foundation',
+        description: 'Enter the family road by protecting shared time on the calendar.'
+      },
+      {
+        id: 'family-practice',
+        roadId: 'family-road',
+        title: 'Shared practice',
+        level: 1,
+        parentId: 'family-journey',
+        childIds: ['family-weekly-ritual'],
+        nodeIds: ['family-route', 'weekly-dinner', 'connected-home'],
+        connectionIds: ['r16', 'r17'],
+        labelX: 252,
+        labelY: 319,
+        tone: 'distance',
+        description: 'A multi-node segment turns protected time into a repeatable shared practice.'
+      },
+      {
+        id: 'family-landmark',
+        roadId: 'family-road',
+        title: 'Landmark',
+        level: 1,
+        parentId: 'family-journey',
+        childIds: ['family-trip-finish'],
+        nodeIds: ['connected-home', 'family-trip'],
+        connectionIds: ['r18'],
+        labelX: 190,
+        labelY: 105,
+        tone: 'readiness',
+        description: 'The final segment connects the home rhythm to the family-trip landmark.'
+      },
+      {
+        id: 'studio-journey',
+        roadId: 'studio-road',
+        title: 'Studio journey',
+        level: 0,
+        parentId: null,
+        childIds: ['studio-direction', 'studio-practice', 'studio-landmark'],
+        nodeIds: ['start', 'choose', 'work-route', 'portfolio', 'interviews', 'work', 'studio'],
+        connectionIds: ['r1', 'r3', 'r6', 'r7', 'r10', 'r11', 'r13'],
+        labelX: 280,
+        labelY: 326,
+        description: 'The parent segment contains three ordered child segments on the studio road.'
+      },
+      {
+        id: 'studio-direction',
+        roadId: 'studio-road',
+        title: 'Direction',
+        level: 1,
+        parentId: 'studio-journey',
+        childIds: ['studio-entry'],
+        nodeIds: ['start', 'choose', 'work-route'],
+        connectionIds: ['r1', 'r3'],
+        labelX: 278,
+        labelY: 527,
+        tone: 'foundation',
+        description: 'Choose the creative direction and enter the studio road.'
+      },
+      {
+        id: 'studio-practice',
+        roadId: 'studio-road',
+        title: 'Craft practice',
+        level: 1,
+        parentId: 'studio-journey',
+        childIds: ['studio-proof', 'studio-conversations'],
+        nodeIds: ['work-route', 'portfolio', 'interviews', 'work'],
+        connectionIds: ['r6', 'r7', 'r10', 'r11'],
+        labelX: 278,
+        labelY: 319,
+        tone: 'distance',
+        description: 'One segment contains alternative task nodes that converge on trusted practice.'
+      },
+      {
+        id: 'studio-landmark',
+        roadId: 'studio-road',
+        title: 'Landmark',
+        level: 1,
+        parentId: 'studio-journey',
+        childIds: ['studio-finish'],
+        nodeIds: ['work', 'studio'],
+        connectionIds: ['r13'],
+        labelX: 304,
+        labelY: 105,
+        tone: 'readiness',
+        description: 'The final segment connects trusted practice to the studio landmark.'
+      },
+      {
+        id: 'marathon-intent', roadId: 'marathon-road', title: 'Choose intent', level: 2,
+        parentId: 'marathon-direction', childIds: [], nodeIds: ['start', 'choose'], connectionIds: ['r1'],
+        labelX: 130, labelY: 605, tone: 'foundation', description: 'The leaf segment that connects the start to a chosen direction.'
+      },
+      {
+        id: 'marathon-entry', roadId: 'marathon-road', title: 'Enter health road', level: 2,
+        parentId: 'marathon-direction', childIds: [], nodeIds: ['choose', 'health-route'], connectionIds: ['r2'],
+        labelX: 108, labelY: 532, tone: 'foundation', description: 'The leaf segment that enters the health branch.'
+      },
+      {
+        id: 'marathon-weekly-base', roadId: 'marathon-road', title: 'Weekly base', level: 2,
+        parentId: 'marathon-foundation', childIds: [], nodeIds: ['health-route', 'base-mileage', 'run', 'sleep'], connectionIds: ['r4', 'r5', 'r21'],
+        labelX: 160, labelY: 418, tone: 'foundation', description: 'A leaf segment with multiple practice nodes for mileage, running, and recovery.'
+      },
+      {
+        id: 'marathon-10k-gate', roadId: 'marathon-road', title: 'Reach 10K', level: 2,
+        parentId: 'marathon-foundation', childIds: [], nodeIds: ['run', 'sleep', 'ten-k-checkpoint'], connectionIds: ['r8', 'r9'],
+        labelX: 144, labelY: 319, tone: 'distance', description: 'Parallel running and recovery nodes converge at the 10K checkpoint.'
+      },
+      {
+        id: 'marathon-21k-build', roadId: 'marathon-road', title: 'Build to 21K', level: 2,
+        parentId: 'marathon-distance', childIds: [], nodeIds: ['ten-k-checkpoint', 'half-marathon-plan', 'health'], connectionIds: ['r22', 'r23'],
+        labelX: 128, labelY: 213, tone: 'distance', description: 'A multi-node leaf segment for the longer endurance block.'
+      },
+      {
+        id: 'marathon-finish-line', roadId: 'marathon-road', title: 'Finish line', level: 2,
+        parentId: 'marathon-readiness', childIds: [], nodeIds: ['health', 'marathon'], connectionIds: ['r12'],
+        labelX: 111, labelY: 105, tone: 'readiness', description: 'The final leaf segment reaches the marathon landmark.'
+      },
+      {
+        id: 'family-time-entry', roadId: 'family-road', title: 'Protect time', level: 2,
+        parentId: 'family-direction', childIds: [], nodeIds: ['start', 'plan-home', 'family-route'], connectionIds: ['r14', 'r15'],
+        labelX: 250, labelY: 527, tone: 'foundation', description: 'A multi-node leaf segment that reserves shared family time.'
+      },
+      {
+        id: 'family-weekly-ritual', roadId: 'family-road', title: 'Weekly ritual', level: 2,
+        parentId: 'family-practice', childIds: [], nodeIds: ['family-route', 'weekly-dinner', 'connected-home'], connectionIds: ['r16', 'r17'],
+        labelX: 252, labelY: 319, tone: 'distance', description: 'A multi-node leaf segment for the weekly shared practice.'
+      },
+      {
+        id: 'family-trip-finish', roadId: 'family-road', title: 'Reach trip', level: 2,
+        parentId: 'family-landmark', childIds: [], nodeIds: ['connected-home', 'family-trip'], connectionIds: ['r18'],
+        labelX: 190, labelY: 105, tone: 'readiness', description: 'The final leaf segment reaches the family-trip landmark.'
+      },
+      {
+        id: 'studio-entry', roadId: 'studio-road', title: 'Enter practice', level: 2,
+        parentId: 'studio-direction', childIds: [], nodeIds: ['start', 'choose', 'work-route'], connectionIds: ['r1', 'r3'],
+        labelX: 278, labelY: 527, tone: 'foundation', description: 'A multi-node leaf segment that enters the creative practice road.'
+      },
+      {
+        id: 'studio-proof', roadId: 'studio-road', title: 'Publish proof', level: 2,
+        parentId: 'studio-practice', childIds: [], nodeIds: ['work-route', 'portfolio', 'work'], connectionIds: ['r6', 'r10'],
+        labelX: 255, labelY: 319, tone: 'distance', description: 'A leaf segment that demonstrates craft through published work.'
+      },
+      {
+        id: 'studio-conversations', roadId: 'studio-road', title: 'Learn from peers', level: 2,
+        parentId: 'studio-practice', childIds: [], nodeIds: ['work-route', 'interviews', 'work'], connectionIds: ['r7', 'r11'],
+        labelX: 328, labelY: 280, tone: 'distance', description: 'A parallel leaf segment that builds perspective through conversations.'
+      },
+      {
+        id: 'studio-finish', roadId: 'studio-road', title: 'Lead studio', level: 2,
+        parentId: 'studio-landmark', childIds: [], nodeIds: ['work', 'studio'], connectionIds: ['r13'],
+        labelX: 304, labelY: 105, tone: 'readiness', description: 'The final leaf segment reaches the studio landmark.'
+      },
+      {
+        id: 'health-family-bridge',
+        roadId: null,
+        title: 'Health → family bridge',
+        level: 0,
+        parentId: null,
+        childIds: [],
+        nodeIds: ['sleep', 'connected-home'],
+        connectionIds: ['r19'],
+        description: 'A standalone cross-road segment connecting health recovery to family energy.'
+      },
+      {
+        id: 'family-studio-bridge',
+        roadId: null,
+        title: 'Family → studio bridge',
+        level: 0,
+        parentId: null,
+        childIds: [],
+        nodeIds: ['weekly-dinner', 'work'],
+        connectionIds: ['r20'],
+        description: 'A standalone cross-road segment that is not yet nested under a parent road.'
+      }
+    ];
+
+    const nodes = originalNodes.map((node) => ({ ...node }));
+    const roads = [
+      { id: 'r1', from: 'start', to: 'choose', state: 'gone', meaning: 'begins with' },
+      { id: 'r2', from: 'choose', to: 'health-route', state: 'gone', meaning: 'opens health road' },
+      { id: 'r3', from: 'choose', to: 'work-route', state: 'gone', meaning: 'opens work road' },
+      { id: 'r4', from: 'health-route', to: 'base-mileage', state: 'gone', meaning: 'starts with a durable base' },
+      { id: 'r5', from: 'base-mileage', to: 'run', state: 'gone', meaning: 'becomes a weekly practice' },
+      { id: 'r6', from: 'work-route', to: 'portfolio', state: 'gone', meaning: 'implemented by' },
+      { id: 'r7', from: 'work-route', to: 'interviews', state: 'blocked', meaning: 'waiting on replies' },
+      { id: 'r8', from: 'run', to: 'ten-k-checkpoint', state: 'todo', meaning: 'builds toward the first distance checkpoint' },
+      { id: 'r9', from: 'sleep', to: 'ten-k-checkpoint', state: 'blocked', meaning: 'recovery routine disrupted' },
+      { id: 'r10', from: 'portfolio', to: 'work', state: 'todo', meaning: 'demonstrates craft' },
+      { id: 'r11', from: 'interviews', to: 'work', state: 'todo', meaning: 'builds perspective' },
+      { id: 'r12', from: 'health', to: 'marathon', state: 'todo', meaning: 'continues toward' },
+      { id: 'r13', from: 'work', to: 'studio', state: 'todo', meaning: 'continues toward' },
+      { id: 'r14', from: 'start', to: 'plan-home', state: 'gone', meaning: 'begins the family road' },
+      { id: 'r15', from: 'plan-home', to: 'family-route', state: 'gone', meaning: 'protects time together' },
+      { id: 'r16', from: 'family-route', to: 'weekly-dinner', state: 'blocked', meaning: 'travel schedules conflict' },
+      { id: 'r17', from: 'weekly-dinner', to: 'connected-home', state: 'todo', meaning: 'builds connection' },
+      { id: 'r18', from: 'connected-home', to: 'family-trip', state: 'todo', meaning: 'makes the trip possible' },
+      { id: 'r19', from: 'sleep', to: 'connected-home', state: 'todo', meaning: 'creates more shared energy' },
+      { id: 'r20', from: 'weekly-dinner', to: 'work', state: 'blocked', meaning: 'needs a sustainable schedule' },
+      { id: 'r21', from: 'base-mileage', to: 'sleep', state: 'todo', meaning: 'requires dependable recovery' },
+      { id: 'r22', from: 'ten-k-checkpoint', to: 'half-marathon-plan', state: 'todo', meaning: 'unlocks the longer training block' },
+      { id: 'r23', from: 'half-marathon-plan', to: 'health', state: 'todo', meaning: 'establishes endurance as a healthy rhythm' }
+    ];
+
+    function generateDeepSegmentLayers() {
+      const levelTwoSegments = roadSegments.filter((segment) => segment.level === 2 && segment.roadId);
+      levelTwoSegments.forEach((segment) => {
+        const groupId = `${segment.id}-node-group`;
+        const atomicIds = segment.connectionIds.map((connectionId) => `${segment.id}-atomic-${connectionId}`);
+        segment.childIds = [groupId];
+        roadSegments.push({
+          id: groupId,
+          roadId: segment.roadId,
+          title: `${segment.title} detail`,
+          level: 3,
+          parentId: segment.id,
+          childIds: atomicIds,
+          nodeIds: [...segment.nodeIds],
+          connectionIds: [...segment.connectionIds],
+          labelX: segment.labelX,
+          labelY: segment.labelY,
+          tone: segment.tone,
+          description: `A deeper node-group segment inside ${segment.title}, before the individual connections are revealed.`
+        });
+        segment.connectionIds.forEach((connectionId, index) => {
+          const connection = roads.find((road) => road.id === connectionId);
+          const from = nodeById(connection.from);
+          const to = nodeById(connection.to);
+          const compactTitle = to.title.length > 13 ? `${to.title.slice(0, 12)}…` : to.title;
+          const direction = index % 2 === 0 ? 1 : -1;
+          roadSegments.push({
+            id: atomicIds[index],
+            roadId: segment.roadId,
+            title: `To ${compactTitle}`,
+            level: 4,
+            parentId: groupId,
+            childIds: [],
+            nodeIds: [from.id, to.id],
+            connectionIds: [connectionId],
+            labelX: Math.max(52, Math.min(338, (from.x + to.x) / 2 + direction * 50)),
+            labelY: (from.y + to.y) / 2,
+            tone: segment.tone,
+            description: `The atomic segment connecting ${from.title} to ${to.title}.`
+          });
+        });
+      });
+    }
+
+    generateDeepSegmentLayers();
+
+    const summaryRoads = {
+      0: [
+        { id: 'summary-health', from: 'start', to: 'marathon', state: 'todo', meaning: 'summarizes the deep health road', hiddenCount: 7, isSummary: true, roadModelId: 'marathon-road', segmentId: 'marathon-journey' },
+        { id: 'summary-family', from: 'start', to: 'family-trip', state: 'blocked', meaning: 'summarizes the family road', hiddenCount: 4, isSummary: true, roadModelId: 'family-road', segmentId: 'family-journey' },
+        { id: 'summary-work', from: 'start', to: 'studio', state: 'todo', meaning: 'summarizes the creative road', hiddenCount: 4, isSummary: true, roadModelId: 'studio-road', segmentId: 'studio-journey' }
+      ],
+      1: [
+        { id: 'summary-health-steps', from: 'health-route', to: 'health', state: 'todo', meaning: 'summarizes the local health steps', hiddenCount: 4, isSummary: true, roadModelId: 'marathon-road', segmentId: 'marathon-journey' },
+        { id: 'summary-family-steps', from: 'family-route', to: 'connected-home', state: 'blocked', meaning: 'summarizes the local family step', hiddenCount: 1, isSummary: true, roadModelId: 'family-road', segmentId: 'family-journey' },
+        { id: 'summary-work-steps', from: 'work-route', to: 'work', state: 'todo', meaning: 'summarizes the local creative steps', hiddenCount: 2, isSummary: true, roadModelId: 'studio-road', segmentId: 'studio-journey' }
+      ]
+    };
+
+    const device = document.querySelector('.device');
+    const mapCanvas = document.getElementById('mapCanvas');
+    const roadsSvg = document.querySelector('.roads');
+    const segmentCorridorLayer = document.getElementById('segmentCorridorLayer');
+    const segmentBadgeLayer = document.getElementById('segmentBadgeLayer');
+    const nodeLayer = document.getElementById('nodeLayer');
+    const roadLayer = document.getElementById('roadLayer');
+    const recordRoadLayer = document.getElementById('recordRoadLayer');
+    const pathDraftLayer = document.getElementById('pathDraftLayer');
+    const detailSheet = document.getElementById('detailSheet');
+    const detailRouteButton = document.getElementById('detailRouteButton');
+    const detailRouteMeta = document.getElementById('detailRouteMeta');
+    const detailAddButton = document.getElementById('detailAddButton');
+    const detailAddLabel = document.getElementById('detailAddLabel');
+    const detailEditButton = document.getElementById('detailEditButton');
+    const detailEditLabel = document.getElementById('detailEditLabel');
+    const detailDeleteButton = document.getElementById('detailDeleteButton');
+    const detailDeleteLabel = document.getElementById('detailDeleteLabel');
+    const legendPanel = document.getElementById('legendPanel');
+    const captureSheet = document.getElementById('captureSheet');
+    const routeSheet = document.getElementById('routeSheet');
+    const mapComposer = document.getElementById('mapComposer');
+    const dragGuide = document.getElementById('dragGuide');
+    const blankPressIndicator = document.getElementById('blankPressIndicator');
+    const toast = document.getElementById('toast');
+    const activeStates = new Set(['gone', 'todo', 'blocked']);
+    let appMode = 'visual';
+    let semanticZoom = 0;
+    let pathDraft;
+    let composerDraft;
+    let selectedNodeId;
+    let selectedRoadId;
+    let selectedSegmentId;
+    let activeRoute;
+    let sparklingRoadIds = new Set();
+    let sparklingRoadTimer;
+    let viewportScale = 1;
+    let viewportPan = { x: 0, y: 0 };
+    let mapCamera = { x: 0, y: 0 };
+    let detailFocusPoint;
+    let toastTimer;
+    let suppressRoadClickId;
+
+    function nodeById(id) { return nodes.find((node) => node.id === id); }
+
+    function roadModelById(id) { return roadModels.find((road) => road.id === id); }
+
+    function segmentById(id) { return roadSegments.find((segment) => segment.id === id); }
+
+    function segmentsForConnection(connectionId) {
+      return roadSegments.filter((segment) => !segment.childIds.length && segment.connectionIds.includes(connectionId));
+    }
+
+    function segmentsForNode(nodeId) {
+      const memberships = roadSegments.filter((segment) => segment.nodeIds.includes(nodeId));
+      const deepestLevel = Math.max(-1, ...memberships.map((segment) => segment.level));
+      return memberships.filter((segment) => segment.level === deepestLevel);
+    }
+
+    function addNodeToSegmentHierarchy(nodeId, segmentId) {
+      let segment = segmentById(segmentId);
+      while (segment) {
+        if (!segment.nodeIds.includes(nodeId)) segment.nodeIds.push(nodeId);
+        segment = segment.parentId ? segmentById(segment.parentId) : undefined;
+      }
+    }
+
+    function registerStandaloneSegment(connection, from, to) {
+      const segment = {
+        id: `segment-${connection.id}`,
+        roadId: null,
+        title: `${from.title} segment`,
+        level: 0,
+        parentId: null,
+        childIds: [],
+        nodeIds: [from.id, to.id],
+        connectionIds: [connection.id],
+        description: 'A standalone segment created directly on the map. It can later become part of a larger road hierarchy.'
+      };
+      roadSegments.push(segment);
+      connection.segmentId = segment.id;
+      return segment;
+    }
+
+    function firstVisibleSegmentLevel(node) {
+      const index = ZOOM_STAGES.findIndex((stage) => stage.layers.includes(node.layer));
+      return index < 0 ? 2 : index;
+    }
+
+    function splitConnectionWithNode(connection, newNode, idSuffix) {
+      const originalFrom = nodeById(connection.from);
+      const originalTo = nodeById(connection.to);
+      const originalMeaning = connection.meaning;
+      const containingSegments = roadSegments.filter((segment) => segment.connectionIds.includes(connection.id));
+      const leafSegments = containingSegments.filter((segment) => !segment.childIds.length);
+      const affectedRoadIds = new Set(containingSegments.map((segment) => segment.roadId).filter(Boolean));
+      const secondConnection = {
+        id: `${connection.id}-split-${idSuffix}`,
+        from: newNode.id,
+        to: originalTo.id,
+        state: connection.state,
+        meaning: originalMeaning
+      };
+
+      connection.to = newNode.id;
+      connection.meaning = 'continues through';
+      roads.push(secondConnection);
+
+      containingSegments.filter((segment) => segment.childIds.length).forEach((segment) => {
+        if (!segment.nodeIds.includes(newNode.id)) segment.nodeIds.push(newNode.id);
+        if (!segment.connectionIds.includes(secondConnection.id)) segment.connectionIds.push(secondConnection.id);
+      });
+
+      leafSegments.forEach((segment, index) => {
+        segment.nodeIds = [...new Set(segment.nodeIds.map((nodeId) => nodeId === originalTo.id ? newNode.id : nodeId))];
+        segment.title = `To ${newNode.title.length > 13 ? `${newNode.title.slice(0, 12)}…` : newNode.title}`;
+        segment.description = `The atomic segment connecting ${originalFrom.title} to ${newNode.title}.`;
+        const sibling = {
+          ...segment,
+          id: `${segment.id}-split-${idSuffix}`,
+          title: `To ${originalTo.title.length > 13 ? `${originalTo.title.slice(0, 12)}…` : originalTo.title}`,
+          nodeIds: [newNode.id, originalTo.id],
+          connectionIds: [secondConnection.id],
+          labelX: Math.max(52, Math.min(338, (newNode.x + originalTo.x) / 2 + (index % 2 === 0 ? 50 : -50))),
+          labelY: (newNode.y + originalTo.y) / 2,
+          description: `The atomic segment connecting ${newNode.title} to ${originalTo.title}.`
+        };
+        roadSegments.push(sibling);
+        if (segment.parentId) {
+          const parent = segmentById(segment.parentId);
+          const insertAt = parent.childIds.indexOf(segment.id) + 1;
+          parent.childIds.splice(insertAt, 0, sibling.id);
+        }
+      });
+
+      summaryRoads[0]
+        .filter((summary) => affectedRoadIds.has(summary.roadModelId))
+        .forEach((summary) => { summary.hiddenCount += 1; });
+      if (newNode.minSegmentLevel >= 2) {
+        summaryRoads[1]
+          .filter((summary) => affectedRoadIds.has(summary.roadModelId))
+          .forEach((summary) => { summary.hiddenCount += 1; });
+      }
+
+      return { secondConnection, segmentId: leafSegments[0]?.id };
+    }
+
+    function isRoadNode(node) {
+      return node.type === 'start' || node.type === 'task' || node.type === 'status' || node.type === 'goal';
+    }
+
+    function itemOutcomeFromRoadState(state) {
+      if (state === 'gone' || state === 'success') return 'success';
+      if (state === 'blocked' || state === 'failed') return 'failed';
+      return 'todo';
+    }
+
+    function roadStateFromItemOutcome(outcome) {
+      return outcome === 'success' ? 'gone' : outcome === 'failed' ? 'blocked' : 'todo';
+    }
+
+    function itemOutcomeFor(node) {
+      if (!node) return 'todo';
+      if (node.type === 'start') return 'success';
+      if (node.type === 'record') return itemOutcomeFromRoadState(node.state || 'success');
+      if (node.state) return itemOutcomeFromRoadState(node.state);
+      const incomingOutcomes = roads
+        .filter((road) => !road.isSummary && road.to === node.id)
+        .map((road) => itemOutcomeFromRoadState(road.state));
+      if (incomingOutcomes.includes('success')) return 'success';
+      if (incomingOutcomes.includes('todo')) return 'todo';
+      if (incomingOutcomes.includes('failed')) return 'failed';
+      return 'todo';
+    }
+
+    function itemOutcomeLabel(outcome) {
+      return outcome === 'success' ? 'Successful' : outcome === 'failed' ? 'Failed' : 'Todo';
+    }
+
+    function endpointRoadState(road) {
+      return roadStateFromItemOutcome(itemOutcomeFor(nodeById(road.to)));
+    }
+
+    function iconFor(type) {
+      if (type === 'goal') return '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 20V4m1 1h9l-2.5 3L17 11H8"/></svg>';
+      if (type === 'task') return '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4.5" y="4.5" width="15" height="15" rx="4"/><path d="m8 12 2.5 2.5L16.5 8.5"/></svg>';
+      if (type === 'status') return '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="7.5"/><circle cx="12" cy="12" r="2.5"/><path d="M12 2.5v2M21.5 12h-2M12 21.5v-2M2.5 12h2"/></svg>';
+      if (type === 'record') return '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 5.5h7l3 3V19H7z"/><path d="M14 5.5v3h3M9.5 12h5M9.5 15h4"/></svg>';
+      return '';
+    }
+
+    function currentZoomStage() { return ZOOM_STAGES[semanticZoom]; }
+
+    function isNodeVisible(node) {
+      if (node.type === 'record') return currentZoomStage().records;
+      if (!Number.isInteger(node.layer)) return currentZoomStage().segmentLevel >= (node.minSegmentLevel ?? 2);
+      return currentZoomStage().layers.includes(node.layer);
+    }
+
+    function renderNodes() {
+      nodeLayer.innerHTML = '';
+      nodes.filter(isNodeVisible).forEach((node) => {
+        const el = document.createElement('button');
+        el.type = 'button';
+        const routeClass = !activeRoute
+          ? ''
+          : activeRoute.nodeIds.includes(node.id)
+            ? ` is-route-node${activeRoute.targetId === node.id ? ' is-route-target' : ''}`
+            : ' is-route-muted';
+        const itemOutcome = itemOutcomeFor(node);
+        el.className = `map-node ${node.type}-node${selectedNodeId === node.id ? ' is-selected' : ''}${routeClass}`;
+        el.dataset.nodeId = node.id;
+        el.dataset.itemState = itemOutcome;
+        el.setAttribute('aria-label', `${node.type}: ${node.title}. ${itemOutcomeLabel(itemOutcome)}. Drag to reposition or tap for details.`);
+        el.style.left = `${node.x / DESIGN.width * 100}%`;
+        el.style.top = `${node.y / DESIGN.height * 100}%`;
+        const glyph = `<span class="${node.type}-glyph" aria-hidden="true">${iconFor(node.type)}</span>`;
+        const pathHandle = appMode === 'edit' && selectedNodeId === node.id && isRoadNode(node) && node.layer < LAYERS.length - 1
+          ? '<span class="path-handle" role="button" aria-label="Drag to draw a new path">↗</span>'
+          : '';
+        el.innerHTML = `<span class="node-hit"></span>${glyph}<span class="node-label">${node.title}</span>${pathHandle}`;
+        attachNodeGestures(el, node);
+        const handle = el.querySelector('.path-handle');
+        if (handle) attachPathGesture(handle, node);
+        nodeLayer.appendChild(el);
+      });
+    }
+
+    function endpoint(from, to, radius) {
+      const dx = to.x - from.x;
+      const dy = to.y - from.y;
+      const length = Math.hypot(dx, dy) || 1;
+      const mapRadius = radius / viewportScale;
+      return { x: from.x + dx / length * mapRadius, y: from.y + dy / length * mapRadius };
+    }
+
+    function roadPathBetween(from, to, curveX = 0, curveY = 0) {
+      const start = endpoint(from, to, from.type === 'goal' ? 27 : 23);
+      const end = endpoint(to, from, to.type === 'goal' ? 29 : 25);
+      const dx = end.x - start.x;
+      const bend = Math.min(18, Math.abs(dx) * 0.08);
+      const curve = dx < 0 ? -bend : bend;
+      return `M ${start.x} ${start.y} C ${start.x + curve + curveX} ${start.y - 42 + curveY}, ${end.x - curve + curveX} ${end.y + 42 + curveY}, ${end.x} ${end.y}`;
+    }
+
+    function roadPath(road) {
+      return roadPathBetween(nodeById(road.from), nodeById(road.to), road.curveX || 0, road.curveY || 0);
+    }
+
+    function roadVisualMidpoint(road) {
+      const from = nodeById(road.from);
+      const to = nodeById(road.to);
+      return {
+        x: (from.x + to.x) / 2 + (road.curveX || 0) * 0.75,
+        y: (from.y + to.y) / 2 + (road.curveY || 0) * 0.75
+      };
+    }
+
+    function segmentBadgeMarkup(segment) {
+      const width = segment.level === 0 ? 108 : 92;
+      const displayTitle = segment.title.length > 18 ? `${segment.title.slice(0, 17)}…` : segment.title;
+      const hierarchyCopy = segment.childIds.length
+        ? `${segment.childIds.length} child · ${segment.nodeIds.length} nodes`
+        : `${segment.nodeIds.length} nodes`;
+      return `<g class="segment-badge${selectedSegmentId === segment.id ? ' is-selected' : ''}" data-segment-id="${segment.id}" transform="translate(${segment.labelX} ${segment.labelY})">
+        <rect x="${-width / 2}" y="-12" width="${width}" height="24" rx="8"/>
+        <text y="-2">${displayTitle}</text>
+        <text class="segment-level" y="7">layer ${segment.level} · ${hierarchyCopy}</text>
+      </g>`;
+    }
+
+    function roadModelForSelection() {
+      const segment = selectedSegmentId ? segmentById(selectedSegmentId) : undefined;
+      if (segment?.roadId) return roadModelById(segment.roadId);
+
+      const selectedRoad = selectedRoadId
+        ? roads.find((road) => road.id === selectedRoadId)
+          || Object.values(summaryRoads).flat().find((road) => road.id === selectedRoadId)
+        : undefined;
+      if (selectedRoad?.roadModelId) return roadModelById(selectedRoad.roadModelId);
+      if (selectedRoad) {
+        const roadSegment = roadSegments.find((candidate) => candidate.roadId && candidate.connectionIds.includes(selectedRoad.id));
+        if (roadSegment) return roadModelById(roadSegment.roadId);
+      }
+
+      const selectedNode = selectedNodeId ? nodeById(selectedNodeId) : undefined;
+      if (selectedNode) {
+        const contextNode = selectedNode.targetId ? nodeById(selectedNode.targetId) : selectedNode;
+        const nodeSegment = roadSegments.find((candidate) => candidate.roadId && candidate.nodeIds.includes(contextNode.id));
+        if (nodeSegment) return roadModelById(nodeSegment.roadId);
+        return roadModels.find((candidate) => segmentById(candidate.rootSegmentId)?.nodeIds.includes(contextNode.id));
+      }
+      return undefined;
+    }
+
+    function focusedRoadModel() {
+      if (activeRoute) {
+        return roadModels.find((candidate) => candidate.goalId === activeRoute.targetId)
+          || roadModels.find((candidate) => {
+            const candidateRoot = segmentById(candidate.rootSegmentId);
+            return candidateRoot?.nodeIds.includes(activeRoute.targetId)
+              && activeRoute.roadIds.some((connectionId) => candidateRoot.connectionIds.includes(connectionId));
+          })
+          || roadModels.find((candidate) => segmentById(candidate.rootSegmentId)?.nodeIds.includes(activeRoute.targetId));
+      }
+      return roadModelForSelection() || roadModels.find((candidate) => candidate.featured) || roadModels[0];
+    }
+
+    function hierarchySegmentsAtLevel(root, level) {
+      if (level === 0) return [root];
+      const descendants = [];
+      const queue = [...root.childIds];
+      while (queue.length) {
+        const segment = segmentById(queue.shift());
+        if (!segment) continue;
+        if (segment.level === level) descendants.push(segment);
+        queue.push(...segment.childIds);
+      }
+      return descendants;
+    }
+
+    function renderSegmentHierarchy() {
+      const model = focusedRoadModel();
+      const root = model ? segmentById(model.rootSegmentId) : undefined;
+      if (!root) {
+        segmentCorridorLayer.innerHTML = '';
+        segmentBadgeLayer.innerHTML = '';
+        return;
+      }
+
+      const segmentLevel = currentZoomStage().segmentLevel;
+      if (segmentLevel === 0) {
+        const parentPath = roadPath({ from: 'start', to: model.goalId });
+        segmentCorridorLayer.innerHTML = `<g class="segment-group" data-tone="parent">
+          <path class="segment-corridor is-parent" d="${parentPath}"/>
+        </g>`;
+        segmentBadgeLayer.innerHTML = segmentBadgeMarkup(root);
+      } else {
+        const visibleSegments = hierarchySegmentsAtLevel(root, segmentLevel);
+        segmentCorridorLayer.innerHTML = visibleSegments.map((segment) => {
+          const corridors = segment.connectionIds
+            .map((connectionId) => roads.find((road) => road.id === connectionId))
+            .filter(Boolean)
+            .map((connection) => `<path class="segment-corridor" d="${roadPath(connection)}"/>`)
+            .join('');
+          return `<g class="segment-group" data-tone="${segment.tone || 'foundation'}">${corridors}</g>`;
+        }).join('');
+        segmentBadgeLayer.innerHTML = visibleSegments.map((segment) => {
+          return `<g class="segment-group" data-tone="${segment.tone || 'foundation'}">${segmentBadgeMarkup(segment)}</g>`;
+        }).join('');
+      }
+
+      segmentBadgeLayer.querySelectorAll('.segment-badge').forEach((badge) => {
+        badge.addEventListener('click', (event) => {
+          event.stopPropagation();
+          if (appMode === 'visual' && suppressVisualItemClick) return;
+          showSegmentDetail(segmentById(badge.dataset.segmentId));
+        });
+      });
+    }
+
+    function blockerMarkup(road, endpointState = endpointRoadState(road)) {
+      if (endpointState !== 'blocked') return '';
+      const { x, y } = roadVisualMidpoint(road);
+      return `<g class="blocker" transform="translate(${x} ${y})"><circle r="7"/><line x1="-2.5" y1="-2.5" x2="2.5" y2="2.5"/><line x1="2.5" y1="-2.5" x2="-2.5" y2="2.5"/></g>`;
+    }
+
+    function visibleRoads() {
+      if (semanticZoom === 0) return summaryRoads[0];
+      const visibleNodeIds = new Set(nodes.filter(isNodeVisible).map((node) => node.id));
+      const directRoads = roads.filter((road) => visibleNodeIds.has(road.from) && visibleNodeIds.has(road.to));
+      return semanticZoom === 1 ? [...directRoads, ...summaryRoads[1]] : directRoads;
+    }
+
+    function summarySegmentStates(road) {
+      const owningSegment = road.segmentId ? segmentById(road.segmentId) : undefined;
+      const allowedRoadIds = owningSegment ? new Set(owningSegment.connectionIds) : undefined;
+      const route = findRoute(road.from, road.to, allowedRoadIds);
+      const states = route?.roadIds
+        .map((roadId) => roads.find((candidate) => candidate.id === roadId))
+        .filter(Boolean)
+        .map(endpointRoadState);
+      return states?.length ? states : [endpointRoadState(road)];
+    }
+
+    function summaryRoadVisibleMarkup(path, states) {
+      const span = 100 / states.length;
+      const gap = Math.min(1.6, span * 0.14);
+      return `<path class="road-summary-underlay" d="${path}"/>${states.map((state, index) => {
+        const start = index * span;
+        const visibleLength = span - gap;
+        const dashOffset = index === 0 ? 0 : 100 - start;
+        const muted = activeStates.has(state) ? '' : ' is-filter-muted';
+        const marker = index === states.length - 1 ? ` marker-end="url(#arrow-${state})"` : '';
+        return `<path class="road-visible road-visible-segment${muted}" data-state="${state}" data-segment-index="${index}" pathLength="100" style="stroke-dasharray:${visibleLength} ${100 - visibleLength};stroke-dashoffset:${dashOffset}" d="${path}"${marker}/>`;
+      }).join('')}`;
+    }
+
+    function summaryBadgeMarkup(road) {
+      if (!road.isSummary) return '';
+      const from = nodeById(road.from);
+      const to = nodeById(road.to);
+      const x = (from.x + to.x) / 2;
+      const y = (from.y + to.y) / 2;
+      return `<g class="summary-badge" transform="translate(${x} ${y})">
+        <rect x="-31" y="-10" width="62" height="20" rx="10"/>
+        <text y="2.5">${road.hiddenCount} hidden nodes</text>
+      </g>`;
+    }
+
+    function attachConnectionGestures(hit, road) {
+      let pressTimer;
+      let pressStart;
+      let edgeDrag;
+
+      const cancelPress = () => {
+        clearTimeout(pressTimer);
+        pressTimer = undefined;
+        pressStart = undefined;
+      };
+
+      const beginEdgeInsert = () => {
+        if (!pressStart) return false;
+        const pointerId = pressStart.pointerId;
+        clearTimeout(pressTimer);
+        pressTimer = undefined;
+        pressStart = undefined;
+        suppressRoadClickId = road.id;
+        setTimeout(() => {
+          if (suppressRoadClickId === road.id) suppressRoadClickId = undefined;
+        }, 5000);
+        try { hit.releasePointerCapture(pointerId); } catch (_) {}
+        openEdgeComposer(road);
+        return true;
+      };
+
+      if (!road.isSummary) {
+        hit.addEventListener('pointerdown', (event) => {
+          if (appMode !== 'edit' || !event.isPrimary || event.button !== 0) return;
+          event.preventDefault();
+          pressStart = { pointerId: event.pointerId, x: event.clientX, y: event.clientY, startedAt: Date.now() };
+          edgeDrag = {
+            curveX: road.curveX || 0,
+            curveY: road.curveY || 0,
+            dragging: false
+          };
+          hit.setPointerCapture(event.pointerId);
+          pressTimer = setTimeout(beginEdgeInsert, 520);
+        });
+        hit.addEventListener('pointermove', (event) => {
+          if (!pressStart || pressStart.pointerId !== event.pointerId) return;
+          const distance = Math.hypot(event.clientX - pressStart.x, event.clientY - pressStart.y);
+          if (distance <= 8) return;
+          clearTimeout(pressTimer);
+          pressTimer = undefined;
+          edgeDrag.dragging = true;
+          hit.parentElement.classList.add('is-dragging');
+          const rect = mapCanvas.getBoundingClientRect();
+          const dx = (event.clientX - pressStart.x) / (rect.width || 1) * DESIGN.width / viewportScale;
+          const dy = (event.clientY - pressStart.y) / (rect.height || 1) * DESIGN.height / viewportScale;
+          road.curveX = Math.max(-120, Math.min(120, edgeDrag.curveX + dx));
+          road.curveY = Math.max(-120, Math.min(120, edgeDrag.curveY + dy));
+          const path = roadPath(road);
+          hit.parentElement.querySelectorAll('.road-visible, .road-hit, .road-spark').forEach((edgePath) => edgePath.setAttribute('d', path));
+        });
+        hit.addEventListener('pointerup', (event) => {
+          if (edgeDrag?.dragging) {
+            suppressRoadClickId = road.id;
+            setTimeout(() => {
+              if (suppressRoadClickId === road.id) suppressRoadClickId = undefined;
+            }, 900);
+            selectedRoadId = road.id;
+            pressStart = undefined;
+            edgeDrag = undefined;
+            try { hit.releasePointerCapture(event.pointerId); } catch (_) {}
+            renderRoads();
+            showToast('Edge curve moved');
+            return;
+          }
+          if (pressStart && Date.now() - pressStart.startedAt >= 420) {
+            beginEdgeInsert();
+          } else {
+            cancelPress();
+          }
+          edgeDrag = undefined;
+        });
+        hit.addEventListener('pointercancel', () => {
+          cancelPress();
+          edgeDrag = undefined;
+        });
+        hit.addEventListener('contextmenu', (event) => {
+          if (appMode !== 'edit') return;
+          event.preventDefault();
+          beginEdgeInsert();
+        });
+      }
+
+      hit.addEventListener('click', (event) => {
+        event.stopPropagation();
+        if (appMode === 'visual' && suppressVisualItemClick) return;
+        if (suppressRoadClickId === road.id) {
+          suppressRoadClickId = undefined;
+          event.preventDefault();
+          return;
+        }
+        showRoadDetail(road);
+      });
+    }
+
+    function renderRoads() {
+      renderSegmentHierarchy();
+      const renderedRoads = visibleRoads();
+      const activeRoadModelId = activeRoute ? focusedRoadModel()?.id : undefined;
+      const exactSelectedRoadVisible = Boolean(selectedRoadId && renderedRoads.some((road) => road.id === selectedRoadId));
+      const selectedRoadModel = selectedRoadId && !exactSelectedRoadVisible ? roadModelForSelection() : undefined;
+      const selectedRoadRoot = selectedRoadModel ? segmentById(selectedRoadModel.rootSegmentId) : undefined;
+      roadLayer.innerHTML = renderedRoads.map((road) => {
+        const path = roadPath(road);
+        const endpointState = endpointRoadState(road);
+        const segmentStates = road.isSummary ? summarySegmentStates(road) : [];
+        const isOnRoute = Boolean(activeRoute && (
+          activeRoute.roadIds.includes(road.id)
+          || (road.isSummary && road.roadModelId === activeRoadModelId)
+        ));
+        const muted = (activeRoute && !isOnRoute) || (!road.isSummary && !activeStates.has(endpointState)) ? ' is-muted' : '';
+        const isSelectedRoadContext = Boolean(selectedRoadModel && (
+          road.isSummary
+            ? road.roadModelId === selectedRoadModel.id
+            : selectedRoadRoot?.connectionIds.includes(road.id)
+        ));
+        const emphasized = road.id === selectedRoadId || isSelectedRoadContext || sparklingRoadIds.has(road.id);
+        const selected = emphasized ? ' is-selected' : '';
+        const summary = road.isSummary ? ' is-summary' : '';
+        const route = isOnRoute ? ' is-route' : '';
+        const visibleMarkup = road.isSummary
+          ? summaryRoadVisibleMarkup(path, segmentStates)
+          : `<path class="road-visible" data-state="${endpointState}" d="${path}" marker-end="url(#arrow-${endpointState})"/>`;
+        return `<g class="road-group${muted}${selected}${summary}${route}" data-road-id="${road.id}" data-state="${endpointState}" data-endpoint-id="${road.to}" data-endpoint-outcome="${itemOutcomeFromRoadState(endpointState)}" data-segment-count="${road.isSummary ? segmentStates.length : 1}">
+          ${visibleMarkup}
+          ${emphasized ? `<path class="road-spark" d="${path}"/>` : ''}
+          ${road.isSummary ? '' : blockerMarkup(road, endpointState)}
+          ${summaryBadgeMarkup(road)}
+          <path class="road-hit" d="${path}"/>
+        </g>`;
+      }).join('');
+
+      recordRoadLayer.innerHTML = currentZoomStage().records ? nodes.filter((node) => node.type === 'record').map((record) => {
+        const target = nodeById(record.targetId);
+        const endpointState = roadStateFromItemOutcome(itemOutcomeFor(target));
+        return `<path class="record-road${activeRoute ? ' is-muted' : ''}" data-state="${endpointState}" data-endpoint-id="${target.id}" d="M ${record.x} ${record.y} Q ${(record.x + target.x) / 2 + 5} ${(record.y + target.y) / 2} ${target.x} ${target.y}"/>`;
+      }).join('') : '';
+
+      roadLayer.querySelectorAll('.road-hit').forEach((hit) => {
+        const road = renderedRoads.find((candidate) => candidate.id === hit.parentElement.dataset.roadId);
+        attachConnectionGestures(hit, road);
+      });
+    }
+
+    function updateRouteSummary() {
+      const hasRoute = Boolean(activeRoute);
+      document.getElementById('defaultProgressSummary').hidden = hasRoute;
+      document.getElementById('defaultForwardSummary').hidden = hasRoute;
+      document.getElementById('routeSummary').hidden = !hasRoute;
+      document.getElementById('hint').hidden = hasRoute;
+      if (!activeRoute) return;
+      const from = nodeById(activeRoute.fromId);
+      const target = nodeById(activeRoute.targetId);
+      const blockedCount = activeRoute.roadIds
+        .map((id) => roads.find((road) => road.id === id))
+        .filter((road) => road && endpointRoadState(road) === 'blocked').length;
+      document.getElementById('routeSummaryTitle').textContent = `${from.title} → ${target.title}`;
+      document.getElementById('routeSummaryMeta').textContent = `${activeRoute.roadIds.length} connections${blockedCount ? ` · ${blockedCount} failed ${blockedCount === 1 ? 'endpoint' : 'endpoints'}` : ' · route clear'}`;
+    }
+
+    function setViewportScale(nextScale, anchor = { x: DESIGN.width / 2, y: DESIGN.height / 2 }, announce = false) {
+      const next = Math.max(0.6, Math.min(2.25, nextScale));
+      if (Math.abs(next - viewportScale) < 0.001) return;
+      if (detailFocusPoint) {
+        viewportPan = {
+          x: DESIGN.width / 2 - detailFocusPoint.x * next,
+          y: DESIGN.height / 2 - detailFocusPoint.y * next
+        };
+      } else if (!activeRoute) {
+        const worldAtAnchor = {
+          x: (anchor.x - viewportPan.x) / viewportScale,
+          y: (anchor.y - viewportPan.y) / viewportScale
+        };
+        viewportPan = {
+          x: anchor.x - worldAtAnchor.x * next,
+          y: anchor.y - worldAtAnchor.y * next
+        };
+      }
+      viewportScale = next;
+      renderRoads();
+      updateMapCamera();
+      if (composerDraft) renderComposerPreview();
+      updateZoomUI();
+      if (announce) showToast(`Map scale ${Math.round(viewportScale * 100)}%`);
+    }
+
+    function semanticViewportZoom(direction, anchor, announce = true) {
+      const scaleFactor = direction > 0 ? 1.16 : 1 / 1.16;
+      setViewportScale(viewportScale * scaleFactor, anchor, false);
+      const previousLayer = semanticZoom;
+      setSemanticZoom(semanticZoom + direction, false, true);
+      if (announce) {
+        const detailDirection = semanticZoom === previousLayer
+          ? direction > 0 ? 'maximum detail' : 'broadest view'
+          : direction > 0 ? 'more detail' : 'less detail';
+        showToast(`${currentZoomStage().name} · ${Math.round(viewportScale * 100)}% · ${detailDirection}`);
+      }
+    }
+
+    function setAppMode(nextMode, announce = true) {
+      if (nextMode !== 'visual' && nextMode !== 'edit') return;
+      const changed = appMode !== nextMode;
+      appMode = nextMode;
+      device.dataset.mode = appMode;
+      closeSheets();
+      closeMapComposer();
+      clearPathDraft();
+      selectedNodeId = undefined;
+      selectedRoadId = undefined;
+      selectedSegmentId = undefined;
+      document.querySelectorAll('[data-map-mode]').forEach((button) => {
+        const active = button.dataset.mapMode === appMode;
+        button.classList.toggle('is-active', active);
+        button.setAttribute('aria-pressed', String(active));
+      });
+      document.getElementById('captureButton').hidden = appMode !== 'edit';
+      document.getElementById('viewportControls').hidden = appMode !== 'visual';
+      renderMap();
+      if (changed && announce) showToast(appMode === 'visual' ? 'Visual mode · drag and pinch the map' : 'Edit mode · move, create, or update map items');
+    }
+
+    function updateZoomUI() {
+      const stage = currentZoomStage();
+      const model = focusedRoadModel();
+      const root = model ? segmentById(model.rootSegmentId) : undefined;
+      const segmentCount = root ? hierarchySegmentsAtLevel(root, stage.segmentLevel).length : 0;
+      document.getElementById('zoomLevelName').textContent = stage.name;
+      document.getElementById('zoomLayerCount').textContent = `${segmentCount} ${segmentCount === 1 ? 'segment' : 'segments'}`;
+      document.getElementById('visibleLayerStat').textContent = `Layer ${stage.segmentLevel}`;
+      const selectedSegment = selectedSegmentId ? segmentById(selectedSegmentId) : undefined;
+      document.getElementById('hintCopy').textContent = appMode === 'visual'
+        ? `Drag to move · pinch for detail · L${semanticZoom} · ${Math.round(viewportScale * 100)}%`
+        : selectedSegment
+          ? `${selectedSegment.title} selected · hold blank space to add a node`
+          : 'Move items · hold blank or drag ↗ to create';
+      document.getElementById('viewportScaleValue').textContent = `L${semanticZoom} · ${Math.round(viewportScale * 100)}%`;
+      document.getElementById('resetButton').setAttribute('aria-label', appMode === 'visual' ? 'Reset map position and scale' : 'Restore editable node layout');
+      document.getElementById('resetButton').title = appMode === 'visual' ? 'Reset visual view' : 'Restore node layout';
+      document.getElementById('sheetResetButton').textContent = appMode === 'visual' ? 'Reset visual position and scale' : 'Restore equal-spaced layout';
+      document.getElementById('zoomOutButton').disabled = semanticZoom === 0;
+      document.getElementById('zoomInButton').disabled = semanticZoom === ZOOM_STAGES.length - 1;
+      updateRouteSummary();
+    }
+
+    function renderMap() {
+      renderNodes();
+      renderRoads();
+      updateZoomUI();
+      updateMapCamera();
+      if (composerDraft) renderComposerPreview();
+    }
+
+    function updateMapCamera() {
+      if (detailFocusPoint && detailSheet.classList.contains('is-open')) {
+        const mapRect = mapCanvas.getBoundingClientRect();
+        const sheetRect = detailSheet.getBoundingClientRect();
+        const visibleBottom = mapRect.height
+          ? Math.max(120, mapRect.height - sheetRect.height) / mapRect.height * DESIGN.height
+          : 380;
+        const visualCenter = { x: DESIGN.width / 2, y: visibleBottom / 2 };
+        mapCamera = {
+          x: visualCenter.x - detailFocusPoint.x * viewportScale,
+          y: visualCenter.y - detailFocusPoint.y * viewportScale
+        };
+      } else if (!activeRoute) {
+        mapCamera = { ...viewportPan };
+      } else {
+        const routeNodes = activeRoute.nodeIds.map(nodeById).filter(Boolean);
+        const xs = routeNodes.map((node) => node.x);
+        const ys = routeNodes.map((node) => node.y);
+        const routeCenter = {
+          x: (Math.min(...xs) + Math.max(...xs)) / 2,
+          y: (Math.min(...ys) + Math.max(...ys)) / 2
+        };
+        mapCamera = {
+          x: DESIGN.width / 2 - routeCenter.x * viewportScale,
+          y: DESIGN.height / 2 - routeCenter.y * viewportScale
+        };
+      }
+      const transform = `translate(${mapCamera.x / DESIGN.width * 100}%, ${mapCamera.y / DESIGN.height * 100}%) scale(${viewportScale})`;
+      nodeLayer.style.setProperty('--map-node-scale', String(1 / viewportScale));
+      [roadsSvg, nodeLayer].forEach((layer) => { layer.style.transform = transform; });
+    }
+
+    function setSemanticZoom(nextZoom, announce = true, preserveFocus = false) {
+      const clamped = Math.max(0, Math.min(ZOOM_STAGES.length - 1, nextZoom));
+      const changed = clamped !== semanticZoom;
+      semanticZoom = clamped;
+      if (changed && !preserveFocus) selectedSegmentId = undefined;
+      pathDraft = undefined;
+      pathDraftLayer.innerHTML = '';
+      closeMapComposer();
+      if (!preserveFocus && selectedNodeId && !isNodeVisible(nodeById(selectedNodeId))) selectedNodeId = undefined;
+      if (!preserveFocus) selectedRoadId = undefined;
+      renderMap();
+      if (changed && announce) showToast(`${currentZoomStage().name}: ${currentZoomStage().hint}`);
+    }
+
+    function closeSheets(exceptId) {
+      let closedDetail = false;
+      [legendPanel, detailSheet, captureSheet, routeSheet].forEach((sheet) => {
+        if (sheet.id !== exceptId) {
+          if (sheet === detailSheet && sheet.classList.contains('is-open')) closedDetail = true;
+          sheet.classList.remove('is-open');
+          sheet.setAttribute('aria-hidden', 'true');
+        }
+      });
+      if (closedDetail) {
+        detailFocusPoint = undefined;
+        updateMapCamera();
+      }
+    }
+
+    function openSheet(sheet) {
+      closeSheets(sheet.id);
+      closeMapComposer();
+      sheet.classList.add('is-open');
+      sheet.setAttribute('aria-hidden', 'false');
+      requestAnimationFrame(updateMapCamera);
+    }
+
+    function clearDetailRouteAction() {
+      detailRouteButton.hidden = true;
+      delete detailRouteButton.dataset.nodeId;
+    }
+
+    function showDetailRouteAction(node) {
+      detailRouteButton.dataset.nodeId = node.id;
+      detailRouteMeta.textContent = `Route from ${nodeById('start').title}`;
+      detailRouteButton.hidden = false;
+    }
+
+    function clearDetailAddAction() {
+      detailAddButton.hidden = true;
+      delete detailAddButton.dataset.mode;
+      delete detailAddButton.dataset.segmentId;
+      delete detailAddButton.dataset.roadId;
+    }
+
+    function showDetailAddAction(label, mode, id) {
+      clearDetailAddAction();
+      detailAddLabel.textContent = label;
+      detailAddButton.dataset.mode = mode;
+      detailAddButton.dataset[mode === 'segment' ? 'segmentId' : 'roadId'] = id;
+      detailAddButton.hidden = false;
+    }
+
+    function clearDetailEditAction() {
+      detailEditButton.hidden = true;
+      delete detailEditButton.dataset.nodeId;
+    }
+
+    function showDetailEditAction(label, nodeId) {
+      detailEditLabel.textContent = label;
+      detailEditButton.dataset.nodeId = nodeId;
+      detailEditButton.hidden = false;
+    }
+
+    let detailDeleteResetTimer;
+
+    function resetDetailDeleteConfirmation() {
+      clearTimeout(detailDeleteResetTimer);
+      detailDeleteResetTimer = undefined;
+      detailDeleteButton.classList.remove('is-armed');
+      delete detailDeleteButton.dataset.armed;
+      if (detailDeleteButton.dataset.label) detailDeleteLabel.textContent = detailDeleteButton.dataset.label;
+    }
+
+    function clearDetailDeleteAction() {
+      resetDetailDeleteConfirmation();
+      detailDeleteButton.hidden = true;
+      delete detailDeleteButton.dataset.mode;
+      delete detailDeleteButton.dataset.nodeId;
+      delete detailDeleteButton.dataset.roadId;
+      delete detailDeleteButton.dataset.label;
+    }
+
+    function showDetailDeleteAction(label, mode, id) {
+      clearDetailDeleteAction();
+      detailDeleteButton.dataset.label = label;
+      detailDeleteLabel.textContent = label;
+      detailDeleteButton.dataset.mode = mode;
+      detailDeleteButton.dataset[mode === 'node' ? 'nodeId' : 'roadId'] = id;
+      detailDeleteButton.hidden = false;
+    }
+
+    function showSegmentDetail(segment) {
+      selectedNodeId = undefined;
+      selectedRoadId = undefined;
+      selectedSegmentId = segment.id;
+      detailFocusPoint = { x: segment.labelX, y: segment.labelY };
+      renderMap();
+      const parent = segment.parentId ? segmentById(segment.parentId) : undefined;
+      const model = segment.roadId ? roadModelById(segment.roadId) : undefined;
+      document.getElementById('detailKicker').textContent = parent
+        ? `Segment · Level ${segment.level} of ${parent.title}`
+        : 'Segment · Parent level';
+      document.getElementById('detailTitle').textContent = segment.title;
+      document.getElementById('detailCopy').textContent = appMode === 'edit'
+        ? `${segment.description} Add a node below, or hold blank space on the map.`
+        : segment.description;
+      document.getElementById('detailMetadata').innerHTML = `
+        <div class="meta-card"><span>${parent ? 'Parent' : 'Road'}</span><strong>${parent?.title || model?.title || 'Standalone'}</strong></div>
+        <div class="meta-card"><span>Nodes</span><strong>${segment.nodeIds.length}</strong></div>
+        <div class="meta-card"><span>${segment.childIds.length ? 'Child segments' : 'Connections'}</span><strong>${segment.childIds.length || segment.connectionIds.length}</strong></div>
+      `;
+      clearDetailRouteAction();
+      if (appMode === 'edit') showDetailAddAction('Add node to segment', 'segment', segment.id);
+      else clearDetailAddAction();
+      clearDetailEditAction();
+      clearDetailDeleteAction();
+      document.getElementById('roadStateButton').hidden = true;
+      openSheet(detailSheet);
+    }
+
+    function showNodeDetail(node) {
+      selectedNodeId = node.id;
+      selectedRoadId = undefined;
+      selectedSegmentId = undefined;
+      detailFocusPoint = { x: node.x, y: node.y };
+      renderMap();
+      const labels = { goal: 'Goal · Landmark', task: 'Task · Road node', status: 'Status · Situation checkpoint', start: 'Start · Journey origin', record: 'Record · What happened' };
+      document.getElementById('detailKicker').textContent = labels[node.type];
+      document.getElementById('detailTitle').textContent = node.title;
+      document.getElementById('detailCopy').textContent = node.description;
+      const target = node.targetId ? nodeById(node.targetId) : undefined;
+      const memberships = segmentsForNode(node.id);
+      const itemOutcome = itemOutcomeFor(node);
+      const membershipLabel = memberships.length
+        ? `${memberships[0].title}${memberships.length > 1 ? ` +${memberships.length - 1}` : ''}`
+        : 'Unassigned';
+      document.getElementById('detailMetadata').innerHTML = `
+        <div class="meta-card"><span>${node.type === 'start' ? 'Kind' : 'Outcome'}</span><strong>${node.type === 'start' ? node.type : itemOutcomeLabel(itemOutcome)}</strong></div>
+        <div class="meta-card"><span>${target ? 'Related to' : 'Depth'}</span><strong>${target ? target.title : node.layer}</strong></div>
+        <div class="meta-card"><span>${node.type === 'record' ? 'Relation' : 'Segment'}</span><strong>${node.type === 'record' ? 'direct' : membershipLabel}</strong></div>
+      `;
+      if (isRoadNode(node) && node.type !== 'start') showDetailRouteAction(node);
+      else clearDetailRouteAction();
+      clearDetailAddAction();
+      if (appMode === 'edit' && isRoadNode(node) && node.type !== 'start') showDetailEditAction('Edit node', node.id);
+      else clearDetailEditAction();
+      if (appMode !== 'edit' || node.type === 'start') clearDetailDeleteAction();
+      else showDetailDeleteAction(node.type === 'record' ? 'Delete record' : 'Delete node', 'node', node.id);
+      document.getElementById('roadStateButton').hidden = true;
+      openSheet(detailSheet);
+    }
+
+    function selectNodeForPath(node) {
+      activeRoute = undefined;
+      selectedNodeId = node.id;
+      selectedRoadId = undefined;
+      selectedSegmentId = undefined;
+      closeSheets();
+      closeMapComposer();
+      renderMap();
+      showToast(node.layer < LAYERS.length - 1 ? 'Drag ↗ to draw a path' : 'This top node can only be a destination');
+    }
+
+    function showRoadDetail(road) {
+      selectedRoadId = road.id;
+      selectedNodeId = undefined;
+      selectedSegmentId = undefined;
+      renderMap();
+      const from = nodeById(road.from);
+      const to = nodeById(road.to);
+      const endpointOutcome = itemOutcomeFor(to);
+      const endpointState = roadStateFromItemOutcome(endpointOutcome);
+      detailFocusPoint = roadVisualMidpoint(road);
+      const rootSegment = road.segmentId ? segmentById(road.segmentId) : undefined;
+      const model = road.roadModelId ? roadModelById(road.roadModelId) : undefined;
+      const memberships = road.isSummary ? [] : segmentsForConnection(road.id);
+      const segment = rootSegment || memberships[0];
+      document.getElementById('detailKicker').textContent = road.isSummary
+        ? rootSegment ? `Road · ${rootSegment.childIds.length} child segments` : 'Road · Summary'
+        : `Connection · ${itemOutcomeLabel(endpointOutcome)} endpoint`;
+      document.getElementById('detailTitle').textContent = road.isSummary
+        ? model?.title || `${from.title} → ${to.title}`
+        : `${from.title} → ${to.title}`;
+      document.getElementById('detailCopy').textContent = road.isSummary
+        ? `${rootSegment?.description || `This road summarizes ${road.hiddenCount} hidden nodes.`} Its equal visual sections preserve the endpoint color of each hidden connection.`
+        : appMode === 'edit'
+          ? `This connection belongs to the ${segment?.title || 'unassigned'} segment. Its color follows ${to.title}, the endpoint. Drag to reshape it, add a node below, or hold the edge on the map.`
+          : `This connection belongs to the ${segment?.title || 'unassigned'} segment. Its color follows ${to.title}, the endpoint.`;
+      document.getElementById('detailMetadata').innerHTML = road.isSummary && rootSegment ? `
+          <div class="meta-card"><span>Parent segment</span><strong>${rootSegment?.title || 'Unassigned'}</strong></div>
+          <div class="meta-card"><span>Color sections</span><strong>${summarySegmentStates(road).length}</strong></div>
+          <div class="meta-card"><span>Hidden nodes</span><strong>${road.hiddenCount}</strong></div>
+        ` : road.isSummary ? `
+          <div class="meta-card"><span>From</span><strong>${from.title}</strong></div>
+          <div class="meta-card"><span>To</span><strong>${to.title}</strong></div>
+          <div class="meta-card"><span>Hidden nodes</span><strong>${road.hiddenCount}</strong></div>
+        ` : `
+          <div class="meta-card"><span>Segment</span><strong>${segment?.title || 'Unassigned'}</strong></div>
+          <div class="meta-card"><span>From → To</span><strong>${from.title} → ${to.title}</strong></div>
+          <div class="meta-card"><span>Endpoint outcome</span><strong>${itemOutcomeLabel(endpointOutcome)}</strong></div>
+        `;
+      clearDetailRouteAction();
+      if (road.isSummary || appMode !== 'edit') clearDetailAddAction();
+      else showDetailAddAction('Add Task or Goal in edge', 'edge', road.id);
+      clearDetailEditAction();
+      if (road.isSummary || appMode !== 'edit') clearDetailDeleteAction();
+      else showDetailDeleteAction('Delete edge', 'edge', road.id);
+      const stateButton = document.getElementById('roadStateButton');
+      const preview = document.getElementById('statePreview');
+      stateButton.hidden = !road.isSummary && appMode !== 'edit';
+      stateButton.dataset.roadId = road.id;
+      stateButton.dataset.summary = road.isSummary ? 'true' : 'false';
+      stateButton.firstElementChild.textContent = road.isSummary ? 'Zoom in to descend one segment layer' : `Tap to change ${to.title}'s outcome`;
+      preview.className = road.isSummary ? 'zoom-preview' : `state-preview ${endpointState}`;
+      preview.textContent = road.isSummary ? '＋' : '';
+      openSheet(detailSheet);
+    }
+
+    function findRoute(fromId, targetId, allowedRoadIds) {
+      const queue = [{ nodeId: fromId, nodeIds: [fromId], roadIds: [], blockedCount: 0 }];
+      const bestCost = new Map([[fromId, 0]]);
+      while (queue.length) {
+        queue.sort((a, b) => (a.blockedCount * 1000 + a.roadIds.length) - (b.blockedCount * 1000 + b.roadIds.length));
+        const current = queue.shift();
+        if (current.nodeId === targetId) return current;
+        roads.filter((road) => road.from === current.nodeId && (!allowedRoadIds || allowedRoadIds.has(road.id))).forEach((road) => {
+          const blockedCount = current.blockedCount + (endpointRoadState(road) === 'blocked' ? 1 : 0);
+          const roadIds = [...current.roadIds, road.id];
+          const cost = blockedCount * 1000 + roadIds.length;
+          if (cost >= (bestCost.get(road.to) ?? Infinity)) return;
+          bestCost.set(road.to, cost);
+          queue.push({
+            nodeId: road.to,
+            nodeIds: [...current.nodeIds, road.to],
+            roadIds,
+            blockedCount
+          });
+        });
+      }
+      return undefined;
+    }
+
+    function renderRouteResults(query = '') {
+      const normalizedQuery = query.trim().toLowerCase();
+      const fromId = document.getElementById('routeFromSelect').value || 'start';
+      const from = nodeById(fromId);
+      const candidates = nodes
+        .filter((node) => isRoadNode(node) && node.id !== fromId && node.title.toLowerCase().includes(normalizedQuery))
+        .sort((a, b) => b.layer - a.layer || a.title.localeCompare(b.title));
+      const results = document.getElementById('routeResults');
+      if (!candidates.length) {
+        results.innerHTML = '<div class="route-empty">No matching destination</div>';
+        return;
+      }
+      results.innerHTML = candidates.map((node) => {
+        const route = findRoute(fromId, node.id);
+        const connectionLabel = route?.roadIds.length === 1 ? 'connection' : 'connections';
+        const routeCopy = route ? `${route.roadIds.length} ${connectionLabel} from ${from.title}` : `No road from ${from.title} yet`;
+        return `<button class="route-result" type="button" data-target-id="${node.id}" data-type="${node.type}" data-item-state="${itemOutcomeFor(node)}">
+          <span class="route-result-icon">${iconFor(node.type)}</span>
+          <span class="route-result-copy"><strong>${node.title}</strong><span>${routeCopy}</span></span>
+          <span class="route-result-arrow">›</span>
+        </button>`;
+      }).join('');
+    }
+
+    function populateRouteOrigins(suggestedId = 'start') {
+      const select = document.getElementById('routeFromSelect');
+      const origins = nodes
+        .filter(isRoadNode)
+        .sort((a, b) => a.layer - b.layer || a.title.localeCompare(b.title));
+      select.innerHTML = origins.map((node) => `<option value="${node.id}"${node.id === suggestedId ? ' selected' : ''}>${node.title} · ${node.type}</option>`).join('');
+    }
+
+    function openRouteSearch() {
+      const input = document.getElementById('routeSearchInput');
+      input.value = '';
+      populateRouteOrigins(activeRoute?.fromId || 'start');
+      renderRouteResults();
+      openSheet(routeSheet);
+      setTimeout(() => input.focus(), 280);
+    }
+
+    function routeSemanticZoom(route) {
+      const routeNodes = route.nodeIds.map(nodeById).filter(Boolean);
+      const requiredZoom = ZOOM_STAGES.findIndex((stage) => routeNodes.every((node) => {
+        if (!Number.isInteger(node.layer)) return stage.segmentLevel >= (node.minSegmentLevel ?? 2);
+        return stage.layers.includes(node.layer);
+      }));
+      return requiredZoom < 0 ? ZOOM_STAGES.length - 1 : requiredZoom;
+    }
+
+    function routeFitScale(route) {
+      const routeNodes = route.nodeIds.map(nodeById).filter(Boolean);
+      const xs = routeNodes.map((node) => node.x);
+      const ys = routeNodes.map((node) => node.y);
+      const boundsWidth = Math.max(...xs) - Math.min(...xs);
+      const boundsHeight = Math.max(...ys) - Math.min(...ys);
+      const horizontalFit = (DESIGN.width - 84) / Math.max(90, boundsWidth);
+      const verticalFit = (DESIGN.height - 124) / Math.max(150, boundsHeight);
+      return Math.max(0.72, Math.min(1.75, horizontalFit, verticalFit));
+    }
+
+    function focusRoute(fromId, targetId) {
+      const from = nodeById(fromId);
+      const target = nodeById(targetId);
+      const route = findRoute(fromId, targetId);
+      if (!route) {
+        showToast(`No road from ${from.title} to ${target.title} yet · connect this node first`);
+        return false;
+      }
+      activeRoute = { fromId, targetId, nodeIds: route.nodeIds, roadIds: route.roadIds };
+      semanticZoom = Math.max(semanticZoom, routeSemanticZoom(route));
+      viewportScale = routeFitScale(route);
+      selectedNodeId = undefined;
+      selectedRoadId = undefined;
+      selectedSegmentId = undefined;
+      closeSheets();
+      closeMapComposer();
+      renderMap();
+      showToast(`Showing road to ${target.title}`);
+      return true;
+    }
+
+    function activateRoute(targetId) {
+      const fromId = document.getElementById('routeFromSelect').value || 'start';
+      focusRoute(fromId, targetId);
+    }
+
+    function clearActiveRoute(announce = true) {
+      if (!activeRoute) return;
+      activeRoute = undefined;
+      renderMap();
+      if (announce) showToast('Route cleared');
+    }
+
+    function attachNodeGestures(el, node) {
+      let start;
+      let moved = false;
+      el.addEventListener('pointerdown', (event) => {
+        if (appMode !== 'edit') return;
+        event.preventDefault();
+        event.stopPropagation();
+        if (activeRoute) {
+          clearActiveRoute(false);
+          showNodeDetail(node);
+          return;
+        }
+        el.setPointerCapture(event.pointerId);
+        start = { x: event.clientX, y: event.clientY, nodeX: node.x, nodeY: node.y };
+        moved = false;
+      });
+      el.addEventListener('pointermove', (event) => {
+        if (!start || !el.hasPointerCapture(event.pointerId)) return;
+        const rect = mapCanvas.getBoundingClientRect();
+        const dx = (event.clientX - start.x) / (rect.width || 1) * DESIGN.width / viewportScale;
+        const dy = (event.clientY - start.y) / (rect.height || 1) * DESIGN.height / viewportScale;
+        moved = moved || Math.hypot(dx, dy) > 4;
+        if (!moved) return;
+        el.classList.add('is-dragging');
+        node.x = Math.max(node.type === 'record' ? 8 : 27, Math.min(node.type === 'record' ? 370 : 363, start.nodeX + dx));
+        node.y = node.type === 'start'
+          ? LAYERS[0]
+          : node.inline
+            ? start.nodeY
+          : Math.max(node.type === 'record' ? 18 : 52, Math.min(690, start.nodeY + dy));
+        if (node.type !== 'record' && node.type !== 'start' && !node.inline) {
+          const nearestLayer = nearestLayerIndex(node.y);
+          dragGuide.style.top = `${screenPointForMapPoint(0, LAYERS[nearestLayer]).y / DESIGN.height * 100}%`;
+          dragGuide.dataset.label = `Depth ${nearestLayer}`;
+          dragGuide.classList.add('is-visible');
+        }
+        el.style.left = `${node.x / DESIGN.width * 100}%`;
+        el.style.top = `${node.y / DESIGN.height * 100}%`;
+        renderRoads();
+      });
+      el.addEventListener('pointerup', (event) => {
+        if (!start) return;
+        if (moved) {
+          if (node.type !== 'record' && node.type !== 'start' && !node.inline) {
+            node.layer = nearestLayerIndex(node.y);
+            node.y = LAYERS[node.layer];
+          }
+          el.style.left = `${node.x / DESIGN.width * 100}%`;
+          el.style.top = `${node.y / DESIGN.height * 100}%`;
+          el.classList.remove('is-dragging');
+          dragGuide.classList.remove('is-visible');
+          renderRoads();
+          showToast(node.type === 'record'
+            ? 'Record moved closer to its story'
+            : node.type === 'start'
+              ? 'Start moved within its permanent start layer'
+              : node.inline
+                ? 'Node moved along its edge depth'
+              : `Snapped to road depth ${node.layer}`);
+        } else {
+          if (node.type === 'record' || selectedNodeId === node.id) showNodeDetail(node);
+          else selectNodeForPath(node);
+        }
+        start = undefined;
+        try { el.releasePointerCapture(event.pointerId); } catch (_) {}
+      });
+      el.addEventListener('pointercancel', () => {
+        start = undefined;
+        el.classList.remove('is-dragging');
+        dragGuide.classList.remove('is-visible');
+      });
+      el.addEventListener('click', (event) => {
+        if (appMode !== 'visual') return;
+        event.stopPropagation();
+        if (suppressVisualItemClick) return;
+        showNodeDetail(node);
+      });
+    }
+
+    function nearestLayerIndex(y) {
+      let bestIndex = 0;
+      let bestDistance = Infinity;
+      LAYERS.forEach((layerY, index) => {
+        const distance = Math.abs(layerY - y);
+        if (distance < bestDistance) { bestDistance = distance; bestIndex = index; }
+      });
+      return bestIndex;
+    }
+
+    function nearestVisibleCreatableLayer(y) {
+      return currentZoomStage().layers
+        .filter((layer) => layer > 0)
+        .reduce((best, layer) => Math.abs(LAYERS[layer] - y) < Math.abs(LAYERS[best] - y) ? layer : best);
+    }
+
+    function segmentComposerPoint(segment) {
+      const members = segment.nodeIds.map(nodeById).filter((node) => node && isRoadNode(node));
+      const averageX = members.length
+        ? members.reduce((sum, node) => sum + node.x, 0) / members.length
+        : DESIGN.width / 2;
+      const averageY = members.length
+        ? members.reduce((sum, node) => sum + node.y, 0) / members.length
+        : DESIGN.height / 2;
+      return {
+        x: Math.max(27, Math.min(363, averageX)),
+        layer: Math.max(1, Math.min(LAYERS.length - 2, nearestLayerIndex(averageY)))
+      };
+    }
+
+    function pruneEmptyConnectionSegments() {
+      let changed = true;
+      while (changed) {
+        changed = false;
+        const removedIds = new Set();
+        for (let index = roadSegments.length - 1; index >= 0; index -= 1) {
+          const segment = roadSegments[index];
+          const isGeneratedDetail = segment.level >= 3;
+          const isStandalone = !segment.roadId;
+          if (segment.connectionIds.length || segment.childIds.length || (!isGeneratedDetail && !isStandalone)) continue;
+          removedIds.add(segment.id);
+          roadSegments.splice(index, 1);
+          changed = true;
+        }
+        if (removedIds.size) {
+          roadSegments.forEach((segment) => {
+            segment.childIds = segment.childIds.filter((childId) => !removedIds.has(childId));
+          });
+        }
+      }
+    }
+
+    function removeConnections(connectionIds) {
+      const removedIds = connectionIds instanceof Set ? connectionIds : new Set(connectionIds);
+      for (let index = roads.length - 1; index >= 0; index -= 1) {
+        if (removedIds.has(roads[index].id)) roads.splice(index, 1);
+      }
+      roadSegments.forEach((segment) => {
+        segment.connectionIds = segment.connectionIds.filter((connectionId) => !removedIds.has(connectionId));
+      });
+      pruneEmptyConnectionSegments();
+    }
+
+    function removeInvalidSummaryRoads(removedRoadModelIds = new Set()) {
+      Object.values(summaryRoads).forEach((summaries) => {
+        for (let index = summaries.length - 1; index >= 0; index -= 1) {
+          const summary = summaries[index];
+          if (!nodeById(summary.from) || !nodeById(summary.to) || removedRoadModelIds.has(summary.roadModelId)) {
+            summaries.splice(index, 1);
+          }
+        }
+      });
+    }
+
+    function deleteEdge(roadId) {
+      const road = roads.find((candidate) => candidate.id === roadId);
+      if (!road) return;
+      const from = nodeById(road.from);
+      const to = nodeById(road.to);
+      removeConnections(new Set([road.id]));
+      activeRoute = undefined;
+      selectedNodeId = undefined;
+      selectedRoadId = undefined;
+      selectedSegmentId = undefined;
+      closeSheets();
+      closeMapComposer();
+      renderMap();
+      showToast(`Deleted edge ${from?.title || 'node'} → ${to?.title || 'node'}`);
+    }
+
+    function deleteNode(nodeId) {
+      const node = nodeById(nodeId);
+      if (!node) return;
+      if (node.type === 'start') {
+        showToast('The permanent Start node cannot be deleted');
+        return;
+      }
+
+      const connectedRoadIds = new Set(
+        roads.filter((road) => road.from === node.id || road.to === node.id).map((road) => road.id)
+      );
+      removeConnections(connectedRoadIds);
+
+      for (let index = nodes.length - 1; index >= 0; index -= 1) {
+        if (nodes[index].id === node.id || nodes[index].targetId === node.id) nodes.splice(index, 1);
+      }
+      roadSegments.forEach((segment) => {
+        segment.nodeIds = segment.nodeIds.filter((memberId) => memberId !== node.id);
+      });
+
+      const removedRoadModelIds = new Set();
+      for (let index = roadModels.length - 1; index >= 0; index -= 1) {
+        if (roadModels[index].goalId !== node.id) continue;
+        removedRoadModelIds.add(roadModels[index].id);
+        roadModels.splice(index, 1);
+      }
+      removeInvalidSummaryRoads(removedRoadModelIds);
+
+      activeRoute = undefined;
+      selectedNodeId = undefined;
+      selectedRoadId = undefined;
+      selectedSegmentId = undefined;
+      closeSheets();
+      closeMapComposer();
+      renderMap();
+      showToast(`Deleted ${node.title}${connectedRoadIds.size ? ` and ${connectedRoadIds.size} connected ${connectedRoadIds.size === 1 ? 'edge' : 'edges'}` : ''}`);
+    }
+
+    function rebalanceLayer(layer) {
+      const layerNodes = nodes
+        .filter((node) => isRoadNode(node) && node.layer === layer)
+        .sort((a, b) => a.x - b.x);
+      const placeNode = (node, x) => {
+        const deltaX = x - node.x;
+        node.x = x;
+        nodes.filter((candidate) => candidate.type === 'record' && candidate.targetId === node.id)
+          .forEach((record) => { record.x = Math.max(12, Math.min(365, record.x + deltaX)); });
+      };
+      if (layerNodes.length === 1) {
+        placeNode(layerNodes[0], DESIGN.width / 2);
+        return;
+      }
+      const start = layerNodes.length === 2 ? 90 : 45;
+      const end = layerNodes.length === 2 ? 300 : 345;
+      const gap = (end - start) / Math.max(1, layerNodes.length - 1);
+      layerNodes.forEach((node, index) => placeNode(node, start + gap * index));
+    }
+
+    function resetLayout() {
+      if (appMode === 'visual') {
+        viewportScale = 1;
+        viewportPan = { x: 0, y: 0 };
+        activeRoute = undefined;
+        closeSheets();
+        renderMap();
+        showToast('Visual map position and scale reset');
+        return;
+      }
+      originalNodes.forEach((original) => {
+        const node = nodeById(original.id);
+        if (node) Object.assign(node, original);
+      });
+      LAYERS.forEach((_, layer) => rebalanceLayer(layer));
+      selectedNodeId = undefined;
+      selectedRoadId = undefined;
+      selectedSegmentId = undefined;
+      clearPathDraft();
+      closeMapComposer();
+      renderMap();
+      closeSheets();
+      showToast('Equal-spaced layout restored');
+    }
+
+    function showToast(message) {
+      clearTimeout(toastTimer);
+      toast.textContent = message;
+      toast.classList.add('is-visible');
+      toastTimer = setTimeout(() => toast.classList.remove('is-visible'), 1800);
+    }
+
+    function populateTargets(suggestedId) {
+      const select = document.getElementById('recordTarget');
+      const targets = nodes.filter((node) => node.type === 'task' || node.type === 'goal');
+      select.innerHTML = targets.map((node) => `<option value="${node.id}"${node.id === suggestedId ? ' selected' : ''}>${node.title} · ${node.type}</option>`).join('');
+    }
+
+    function openCapture() {
+      if (appMode !== 'edit') return;
+      const suggested = nodeById(selectedNodeId);
+      populateTargets(suggested && (suggested.type === 'task' || suggested.type === 'goal') ? suggested.id : 'run');
+      openSheet(captureSheet);
+      setTimeout(() => document.getElementById('recordText').focus(), 280);
+    }
+
+    function designPoint(event) {
+      const rect = mapCanvas.getBoundingClientRect();
+      const rawX = (event.clientX - rect.left) / rect.width * DESIGN.width;
+      const rawY = (event.clientY - rect.top) / rect.height * DESIGN.height;
+      return {
+        x: Math.max(10, Math.min(DESIGN.width - 10, (rawX - mapCamera.x) / viewportScale)),
+        y: Math.max(10, Math.min(DESIGN.height - 10, (rawY - mapCamera.y) / viewportScale))
+      };
+    }
+
+    function screenPointForMapPoint(x, y) {
+      return {
+        x: x * viewportScale + mapCamera.x,
+        y: y * viewportScale + mapCamera.y
+      };
+    }
+
+    function nearbyMapNode(from, point) {
+      return nodes
+        .filter((node) => node.id !== from.id && isRoadNode(node) && isNodeVisible(node))
+        .map((node) => ({ node, distance: Math.hypot(node.x - point.x, node.y - point.y) }))
+        .filter((candidate) => candidate.distance <= 38)
+        .sort((a, b) => a.distance - b.distance)[0]?.node;
+    }
+
+    function clearPathTargetHighlight() {
+      nodeLayer.querySelectorAll('.is-path-target').forEach((node) => node.classList.remove('is-path-target'));
+    }
+
+    function renderPathDraft() {
+      if (!pathDraft) {
+        pathDraftLayer.innerHTML = '';
+        return;
+      }
+      const from = nodeById(pathDraft.fromId);
+      const end = pathDraft.targetId ? nodeById(pathDraft.targetId) : pathDraft;
+      const start = endpoint(from, end, from.type === 'goal' ? 27 : 23);
+      const curve = (end.x - start.x) * 0.08;
+      pathDraftLayer.innerHTML = `<path class="path-draft" d="M ${start.x} ${start.y} C ${start.x + curve} ${start.y - 40}, ${end.x - curve} ${end.y + 40}, ${end.x} ${end.y}" marker-end="url(#arrow-todo)"/>`;
+    }
+
+    function composerPreviewRoad(from, to, state, curveX = 0, curveY = 0) {
+      const path = roadPathBetween(from, to, curveX, curveY);
+      return `<g class="composer-preview-road" data-state="${state}">
+        <path class="composer-preview-visible" d="${path}" marker-end="url(#arrow-${state})"/>
+        <path class="composer-preview-spark" d="${path}"/>
+      </g>`;
+    }
+
+    function renderComposerPreview() {
+      nodeLayer.querySelector('.composer-preview-node')?.remove();
+      if (!composerDraft) {
+        pathDraftLayer.innerHTML = '';
+        return;
+      }
+
+      const y = composerDraft.y ?? LAYERS[composerDraft.layer];
+      const previewNode = {
+        type: composerDraft.type,
+        x: composerDraft.x,
+        y
+      };
+      const preview = document.createElement('div');
+      preview.className = `map-node ${previewNode.type}-node is-selected composer-preview-node`;
+      const previewEdge = composerDraft.edgeId ? roads.find((connection) => connection.id === composerDraft.edgeId) : undefined;
+      const editedPreviewNode = composerDraft.nodeId ? nodeById(composerDraft.nodeId) : undefined;
+      const previewState = previewEdge ? endpointRoadState(previewEdge) : composerDraft.state;
+      preview.dataset.itemState = editedPreviewNode
+        ? itemOutcomeFor(editedPreviewNode)
+        : itemOutcomeFromRoadState(previewState);
+      preview.setAttribute('aria-hidden', 'true');
+      preview.style.left = `${previewNode.x / DESIGN.width * 100}%`;
+      preview.style.top = `${previewNode.y / DESIGN.height * 100}%`;
+      preview.innerHTML = `<span class="${previewNode.type}-glyph">${iconFor(previewNode.type)}</span><span class="node-label"></span>`;
+      preview.querySelector('.node-label').textContent = document.getElementById('composerInput').value.trim() || `New ${previewNode.type}`;
+      nodeLayer.appendChild(preview);
+
+      const previewRoads = [];
+      const edge = previewEdge;
+      const from = composerDraft.fromId ? nodeById(composerDraft.fromId) : undefined;
+      const editedNode = editedPreviewNode;
+      if (editedNode) {
+        nodeLayer.querySelector(`[data-node-id="${editedNode.id}"]`)?.classList.add('is-preview-source');
+        roads.filter((road) => road.from === editedNode.id || road.to === editedNode.id).forEach((road) => {
+          previewRoads.push(composerPreviewRoad(
+            road.from === editedNode.id ? previewNode : nodeById(road.from),
+            road.to === editedNode.id ? previewNode : nodeById(road.to),
+            endpointRoadState(road),
+            road.curveX || 0,
+            road.curveY || 0
+          ));
+        });
+      } else if (edge) {
+        previewRoads.push(composerPreviewRoad(nodeById(edge.from), previewNode, previewState));
+        previewRoads.push(composerPreviewRoad(previewNode, nodeById(edge.to), previewState));
+      } else if (from) {
+        previewRoads.push(composerPreviewRoad(from, previewNode, composerDraft.state));
+      }
+      pathDraftLayer.innerHTML = previewRoads.join('');
+    }
+
+    function clearComposerPreview() {
+      nodeLayer.querySelector('.composer-preview-node')?.remove();
+      nodeLayer.querySelectorAll('.is-preview-source').forEach((node) => node.classList.remove('is-preview-source'));
+      pathDraftLayer.innerHTML = '';
+    }
+
+    function sparkleRoadsTemporarily(roadIds) {
+      clearTimeout(sparklingRoadTimer);
+      sparklingRoadIds = new Set(roadIds.filter(Boolean));
+      sparklingRoadTimer = setTimeout(() => {
+        sparklingRoadIds.clear();
+        renderRoads();
+      }, 3000);
+    }
+
+    function clearPathDraft() {
+      pathDraft = undefined;
+      pathDraftLayer.innerHTML = '';
+      clearPathTargetHighlight();
+    }
+
+    function connectExistingNodes(from, to) {
+      if (to.layer <= from.layer) {
+        showToast('Paths must move forward toward the top');
+        return;
+      }
+      if (roads.some((road) => road.from === from.id && road.to === to.id)) {
+        showToast('Those nodes already have a path');
+        return;
+      }
+      const road = { id: `road-${Date.now()}`, from: from.id, to: to.id, state: 'todo', meaning: 'connects to' };
+      roads.push(road);
+      registerStandaloneSegment(road, from, to);
+      activeRoute = undefined;
+      selectedNodeId = undefined;
+      selectedRoadId = road.id;
+      sparkleRoadsTemporarily([road.id]);
+      semanticZoom = Math.max(2, semanticZoom);
+      renderMap();
+      showToast(`New segment: ${from.title} → ${to.title}`);
+    }
+
+    function attachPathGesture(handle, from) {
+      handle.addEventListener('pointerdown', (event) => {
+        if (appMode !== 'edit') return;
+        event.preventDefault();
+        event.stopPropagation();
+        closeSheets();
+        closeMapComposer();
+        handle.setPointerCapture(event.pointerId);
+        const point = designPoint(event);
+        pathDraft = { fromId: from.id, ...point };
+        renderPathDraft();
+      });
+      handle.addEventListener('pointermove', (event) => {
+        if (!pathDraft || pathDraft.fromId !== from.id || !handle.hasPointerCapture(event.pointerId)) return;
+        event.preventDefault();
+        const point = designPoint(event);
+        const target = nearbyMapNode(from, point);
+        clearPathTargetHighlight();
+        if (target && target.layer > from.layer && !roads.some((road) => road.from === from.id && road.to === target.id)) {
+          nodeLayer.querySelector(`[data-node-id="${target.id}"]`)?.classList.add('is-path-target');
+          pathDraft = { fromId: from.id, x: target.x, y: target.y, targetId: target.id };
+        } else {
+          pathDraft = { fromId: from.id, ...point };
+        }
+        renderPathDraft();
+      });
+      handle.addEventListener('pointerup', (event) => {
+        if (!pathDraft || pathDraft.fromId !== from.id) return;
+        const point = designPoint(event);
+        const nearby = nearbyMapNode(from, point);
+        const target = pathDraft.targetId ? nodeById(pathDraft.targetId) : nearby;
+        clearPathDraft();
+        try { handle.releasePointerCapture(event.pointerId); } catch (_) {}
+        if (target) {
+          connectExistingNodes(from, target);
+          return;
+        }
+        const layer = nearestLayerIndex(point.y);
+        if (layer <= from.layer) {
+          showToast('Drag into a forward layer toward the top');
+          return;
+        }
+        openMapComposer(from, point.x, layer);
+      });
+      handle.addEventListener('pointercancel', clearPathDraft);
+    }
+
+    function openEdgeComposer(connection) {
+      const from = nodeById(connection.from);
+      const to = nodeById(connection.to);
+      const { x, y } = roadVisualMidpoint(connection);
+      const layer = (from.layer + to.layer) / 2;
+      selectedNodeId = undefined;
+      selectedRoadId = connection.id;
+      selectedSegmentId = roadSegments.find((segment) =>
+        segment.level === currentZoomStage().segmentLevel && segment.connectionIds.includes(connection.id)
+      )?.id || segmentsForConnection(connection.id)[0]?.id;
+      openMapComposer(undefined, x, layer, selectedSegmentId, connection.id, y);
+    }
+
+    function openNodeEditor(node) {
+      if (appMode !== 'edit' || !node || node.type === 'start' || node.type === 'record') return;
+      closeSheets();
+      composerDraft = {
+        nodeId: node.id,
+        x: node.x,
+        y: node.y,
+        layer: node.layer,
+        type: node.type,
+        state: 'todo'
+      };
+      const screenPoint = screenPointForMapPoint(node.x, node.y);
+      const composerY = screenPoint.y < DESIGN.height / 2 ? screenPoint.y + 150 : screenPoint.y - 150;
+      mapComposer.style.left = `${Math.max(118, Math.min(272, screenPoint.x)) / DESIGN.width * 100}%`;
+      mapComposer.style.top = `${Math.max(112, Math.min(598, composerY)) / DESIGN.height * 100}%`;
+      document.getElementById('composerTitle').textContent = 'Edit node';
+      document.getElementById('composerInput').value = node.title;
+      document.getElementById('composerStateOptions').hidden = true;
+      document.querySelector('[data-composer-type="status"]').hidden = false;
+      document.querySelector('[data-composer-type="goal"]').hidden = false;
+      document.querySelectorAll('[data-composer-type]').forEach((button) => button.classList.toggle('is-active', button.dataset.composerType === node.type));
+      document.getElementById('composerCreate').textContent = 'Save changes';
+      mapComposer.hidden = false;
+      renderComposerPreview();
+      setTimeout(() => document.getElementById('composerInput').select(), 50);
+    }
+
+    function openMapComposer(from, x, layer, segmentId, edgeId, exactY) {
+      if (appMode !== 'edit') return;
+      closeSheets();
+      const segment = segmentId ? segmentById(segmentId) : undefined;
+      const edge = edgeId ? roads.find((connection) => connection.id === edgeId) : undefined;
+      const type = edge ? 'task' : layer === LAYERS.length - 1 ? 'goal' : 'task';
+      composerDraft = {
+        fromId: from?.id,
+        segmentId: segment?.id,
+        edgeId: edge?.id,
+        x: Math.max(27, Math.min(363, x)),
+        y: exactY,
+        layer,
+        type,
+        state: 'todo'
+      };
+      const previewY = exactY ?? LAYERS[layer];
+      const screenPoint = screenPointForMapPoint(x, previewY);
+      const composerY = screenPoint.y < DESIGN.height / 2 ? screenPoint.y + 150 : screenPoint.y - 150;
+      mapComposer.style.left = `${Math.max(118, Math.min(272, screenPoint.x)) / DESIGN.width * 100}%`;
+      mapComposer.style.top = `${Math.max(112, Math.min(598, composerY)) / DESIGN.height * 100}%`;
+      document.getElementById('composerTitle').textContent = edge
+        ? 'Insert node in edge'
+        : segment
+        ? `New node in ${segment.title}`
+        : from ? 'New connected node' : 'New isolated node';
+      document.getElementById('composerInput').value = '';
+      document.getElementById('composerStateOptions').hidden = !from;
+      document.querySelector('[data-composer-type="status"]').hidden = Boolean(edge);
+      document.querySelector('[data-composer-type="goal"]').hidden = false;
+      document.querySelectorAll('[data-composer-type]').forEach((button) => button.classList.toggle('is-active', button.dataset.composerType === type));
+      document.querySelectorAll('[data-composer-state]').forEach((button) => button.classList.toggle('is-active', button.dataset.composerState === 'todo'));
+      document.getElementById('composerCreate').textContent = 'Create here';
+      mapComposer.hidden = false;
+      renderComposerPreview();
+      setTimeout(() => document.getElementById('composerInput').focus(), 50);
+    }
+
+    function closeMapComposer() {
+      mapComposer.hidden = true;
+      composerDraft = undefined;
+      clearComposerPreview();
+    }
+
+    function createNodeFromMap() {
+      if (!composerDraft) return;
+      const input = document.getElementById('composerInput');
+      const title = input.value.trim();
+      if (!title) {
+        input.focus();
+        showToast('Name the new node first');
+        return;
+      }
+      if (composerDraft.nodeId) {
+        const node = nodeById(composerDraft.nodeId);
+        if (!node) return;
+        node.title = title;
+        node.type = composerDraft.type;
+        const connectedRoadIds = roads
+          .filter((road) => road.from === node.id || road.to === node.id)
+          .map((road) => road.id);
+        selectedNodeId = node.id;
+        selectedRoadId = undefined;
+        selectedSegmentId = segmentsForNode(node.id)[0]?.id;
+        sparkleRoadsTemporarily(connectedRoadIds);
+        closeMapComposer();
+        renderMap();
+        showToast(`Updated ${node.title}`);
+        return;
+      }
+      const from = composerDraft.fromId ? nodeById(composerDraft.fromId) : undefined;
+      const segment = composerDraft.segmentId ? segmentById(composerDraft.segmentId) : undefined;
+      const edge = composerDraft.edgeId ? roads.find((connection) => connection.id === composerDraft.edgeId) : undefined;
+      const idSuffix = Date.now();
+      const minimumSegmentLevel = edge
+        ? Math.max(firstVisibleSegmentLevel(nodeById(edge.from)), firstVisibleSegmentLevel(nodeById(edge.to)))
+        : undefined;
+      const newNode = {
+        id: `node-${idSuffix}`,
+        type: composerDraft.type,
+        title,
+        x: composerDraft.x,
+        y: composerDraft.y ?? LAYERS[composerDraft.layer],
+        layer: composerDraft.layer,
+        inline: Boolean(edge),
+        state: edge
+          ? itemOutcomeFor(nodeById(edge.to))
+          : from
+            ? itemOutcomeFromRoadState(composerDraft.state)
+            : 'todo',
+        minSegmentLevel: minimumSegmentLevel,
+        description: edge
+          ? `A ${composerDraft.type} node inserted directly into an existing edge.`
+          : segment
+          ? `A ${composerDraft.type} node added directly inside the ${segment.title} segment.`
+          : composerDraft.type === 'goal'
+          ? 'A new landmark drawn directly on the map.'
+          : composerDraft.type === 'status'
+            ? 'A snapshot of the situation at this point on the road.'
+            : 'A new executable step drawn directly on the map.'
+      };
+      nodes.push(newNode);
+      if (segment && !edge) addNodeToSegmentHierarchy(newNode.id, segment.id);
+      let splitResult;
+      if (edge) splitResult = splitConnectionWithNode(edge, newNode, idSuffix);
+      let road;
+      if (from) {
+        road = {
+          id: `road-${idSuffix}`,
+          from: from.id,
+          to: newNode.id,
+          state: composerDraft.state,
+          meaning: composerDraft.type === 'goal' ? 'moves toward' : composerDraft.type === 'status' ? 'results in' : 'implemented by'
+        };
+        roads.push(road);
+        registerStandaloneSegment(road, from, newNode);
+      }
+      if (edge && activeRoute) {
+        const routeIndex = activeRoute.roadIds.indexOf(edge.id);
+        if (routeIndex >= 0) {
+          activeRoute.roadIds.splice(routeIndex + 1, 0, splitResult.secondConnection.id);
+          activeRoute.nodeIds.splice(routeIndex + 1, 0, newNode.id);
+        } else {
+          activeRoute = undefined;
+        }
+      } else if (!segment) {
+        activeRoute = undefined;
+      }
+      if (!edge) rebalanceLayer(newNode.layer);
+      selectedNodeId = newNode.id;
+      selectedRoadId = edge ? edge.id : road?.id;
+      selectedSegmentId = segment?.id || splitResult?.segmentId;
+      sparkleRoadsTemporarily(edge
+        ? [edge.id, splitResult?.secondConnection.id]
+        : road ? [road.id] : []);
+      if (from) semanticZoom = Math.max(2, semanticZoom);
+      closeMapComposer();
+      renderMap();
+      showToast(edge
+        ? `Inserted ${title} · edge split into two connections`
+        : segment
+        ? `Added ${title} to ${segment.title} · drag ↗ to connect`
+        : from
+        ? `Created ${title} and its segment`
+        : newNode.layer < LAYERS.length - 1
+          ? `Created isolated ${title} · drag its ↗ to connect`
+          : `Created isolated ${title} · connect from a lower node`);
+    }
+
+    function saveRecord() {
+      const targetId = document.getElementById('recordTarget').value;
+      const input = document.getElementById('recordText');
+      const summary = input.value.trim();
+      if (!summary) {
+        input.focus();
+        showToast('Add a short note first');
+        return;
+      }
+      const target = nodeById(targetId);
+      const side = target.x > DESIGN.width / 2 ? -1 : 1;
+      const record = {
+        id: `record-${Date.now()}`,
+        type: 'record',
+        title: summary.length > 15 ? `${summary.slice(0, 14)}…` : summary,
+        x: Math.max(12, Math.min(365, target.x + side * 39)),
+        y: Math.max(20, target.y + 38),
+        targetId,
+        description: summary
+      };
+      nodes.push(record);
+      input.value = '';
+      setSemanticZoom(ZOOM_STAGES.length - 1, false);
+      closeSheets();
+      showToast(`Record attached to ${target.title}`);
+    }
+
+    document.querySelectorAll('[data-map-mode]').forEach((button) => {
+      button.addEventListener('click', () => setAppMode(button.dataset.mapMode));
+    });
+    document.getElementById('viewportZoomOutButton').addEventListener('click', () => semanticViewportZoom(-1));
+    document.getElementById('viewportZoomInButton').addEventListener('click', () => semanticViewportZoom(1));
+    document.getElementById('routeSearchButton').addEventListener('click', openRouteSearch);
+    document.getElementById('routeClearButton').addEventListener('click', () => clearActiveRoute());
+    document.getElementById('routeFromSelect').addEventListener('change', () => {
+      renderRouteResults(document.getElementById('routeSearchInput').value);
+    });
+    document.getElementById('routeSearchInput').addEventListener('input', (event) => renderRouteResults(event.target.value));
+    document.getElementById('routeSearchInput').addEventListener('keydown', (event) => {
+      if (event.key !== 'Enter') return;
+      const firstResult = document.querySelector('#routeResults .route-result');
+      if (firstResult) activateRoute(firstResult.dataset.targetId);
+    });
+    document.getElementById('routeResults').addEventListener('click', (event) => {
+      const result = event.target.closest('.route-result');
+      if (result) activateRoute(result.dataset.targetId);
+    });
+    document.getElementById('legendButton').addEventListener('click', () => openSheet(legendPanel));
+    document.getElementById('resetButton').addEventListener('click', resetLayout);
+    document.getElementById('sheetResetButton').addEventListener('click', resetLayout);
+    document.getElementById('captureButton').addEventListener('click', openCapture);
+    document.getElementById('saveRecordButton').addEventListener('click', saveRecord);
+    detailRouteButton.addEventListener('click', () => {
+      const targetId = detailRouteButton.dataset.nodeId;
+      if (targetId) focusRoute('start', targetId);
+    });
+
+    detailAddButton.addEventListener('click', () => {
+      if (appMode !== 'edit') return;
+      if (detailAddButton.dataset.mode === 'edge') {
+        const connection = roads.find((road) => road.id === detailAddButton.dataset.roadId);
+        if (connection) openEdgeComposer(connection);
+        return;
+      }
+      if (detailAddButton.dataset.mode !== 'segment') return;
+      const segment = segmentById(detailAddButton.dataset.segmentId);
+      if (!segment) return;
+      if (semanticZoom < 2) setSemanticZoom(2, false);
+      selectedSegmentId = segment.id;
+      const point = segmentComposerPoint(segment);
+      renderMap();
+      openMapComposer(undefined, point.x, point.layer, segment.id);
+    });
+    detailEditButton.addEventListener('click', () => {
+      if (appMode !== 'edit') return;
+      openNodeEditor(nodeById(detailEditButton.dataset.nodeId));
+    });
+    detailDeleteButton.addEventListener('click', () => {
+      if (appMode !== 'edit') return;
+      if (detailDeleteButton.dataset.armed !== 'true') {
+        detailDeleteButton.dataset.armed = 'true';
+        detailDeleteButton.classList.add('is-armed');
+        detailDeleteLabel.textContent = `Tap again to ${detailDeleteButton.dataset.label.toLowerCase()}`;
+        detailDeleteResetTimer = setTimeout(resetDetailDeleteConfirmation, 3000);
+        return;
+      }
+      const mode = detailDeleteButton.dataset.mode;
+      const nodeId = detailDeleteButton.dataset.nodeId;
+      const roadId = detailDeleteButton.dataset.roadId;
+      resetDetailDeleteConfirmation();
+      if (mode === 'node') deleteNode(nodeId);
+      if (mode === 'edge') deleteEdge(roadId);
+    });
+    document.getElementById('zoomOutButton').addEventListener('click', () => setSemanticZoom(semanticZoom - 1, true, appMode === 'visual'));
+    document.getElementById('zoomInButton').addEventListener('click', () => setSemanticZoom(semanticZoom + 1, true, appMode === 'visual'));
+    document.getElementById('composerClose').addEventListener('click', closeMapComposer);
+    document.getElementById('composerCancel').addEventListener('click', closeMapComposer);
+    document.getElementById('composerCreate').addEventListener('click', createNodeFromMap);
+    document.getElementById('composerInput').addEventListener('keydown', (event) => {
+      if (event.key === 'Enter') createNodeFromMap();
+    });
+    document.getElementById('composerInput').addEventListener('input', renderComposerPreview);
+    document.querySelectorAll('[data-composer-type]').forEach((button) => {
+      button.addEventListener('click', () => {
+        if (!composerDraft) return;
+        composerDraft.type = button.dataset.composerType;
+        document.querySelectorAll('[data-composer-type]').forEach((candidate) => candidate.classList.toggle('is-active', candidate === button));
+        renderComposerPreview();
+      });
+    });
+    document.querySelectorAll('[data-composer-state]').forEach((button) => {
+      button.addEventListener('click', () => {
+        if (!composerDraft) return;
+        composerDraft.state = button.dataset.composerState;
+        document.querySelectorAll('[data-composer-state]').forEach((candidate) => candidate.classList.toggle('is-active', candidate === button));
+        renderComposerPreview();
+      });
+    });
+
+    document.querySelectorAll('[data-close]').forEach((button) => {
+      button.addEventListener('click', () => {
+        const sheet = document.getElementById(button.dataset.close);
+        sheet.classList.remove('is-open');
+        sheet.setAttribute('aria-hidden', 'true');
+        if (sheet === detailSheet) {
+          detailFocusPoint = undefined;
+          updateMapCamera();
+        }
+      });
+    });
+
+    document.querySelectorAll('.filter-button').forEach((button) => {
+      button.addEventListener('click', () => {
+        const state = button.dataset.state;
+        if (activeStates.has(state) && activeStates.size > 1) {
+          activeStates.delete(state);
+          button.classList.remove('is-active');
+        } else {
+          activeStates.add(state);
+          button.classList.add('is-active');
+        }
+        renderRoads();
+      });
+    });
+
+    document.getElementById('roadStateButton').addEventListener('click', (event) => {
+      if (event.currentTarget.dataset.summary === 'true') {
+        closeSheets();
+        if (appMode === 'visual') semanticViewportZoom(1);
+        else setSemanticZoom(semanticZoom + 1);
+        return;
+      }
+      if (appMode !== 'edit') return;
+      const road = roads.find((candidate) => candidate.id === event.currentTarget.dataset.roadId);
+      const endpoint = nodeById(road.to);
+      const cycle = ['success', 'todo', 'failed'];
+      const nextOutcome = cycle[(cycle.indexOf(itemOutcomeFor(endpoint)) + 1) % cycle.length];
+      const nextRoadState = roadStateFromItemOutcome(nextOutcome);
+      endpoint.state = nextOutcome;
+      roads.filter((candidate) => candidate.to === endpoint.id).forEach((candidate) => {
+        candidate.state = nextRoadState;
+      });
+      showRoadDetail(road);
+      updateRouteSummary();
+      showToast(`${endpoint.title} is ${itemOutcomeLabel(nextOutcome).toLowerCase()} · incoming edges updated`);
+    });
+
+    function isBlankMapTarget(target) {
+      return target === mapCanvas
+        || target.classList?.contains('roads');
+    }
+
+    let visualPanStart;
+    let suppressVisualItemClick = false;
+
+    mapCanvas.addEventListener('pointerdown', (event) => {
+      if (appMode !== 'visual' || !event.isPrimary || event.button !== 0 || event.target.closest?.('.map-composer')) return;
+      visualPanStart = {
+        pointerId: event.pointerId,
+        clientX: event.clientX,
+        clientY: event.clientY,
+        cameraX: mapCamera.x,
+        cameraY: mapCamera.y,
+        moved: false
+      };
+    });
+
+    mapCanvas.addEventListener('pointermove', (event) => {
+      if (!visualPanStart || visualPanStart.pointerId !== event.pointerId) return;
+      const dxPixels = event.clientX - visualPanStart.clientX;
+      const dyPixels = event.clientY - visualPanStart.clientY;
+      if (!visualPanStart.moved && Math.hypot(dxPixels, dyPixels) <= 5) return;
+      event.preventDefault();
+      if (!visualPanStart.moved) {
+        visualPanStart.moved = true;
+        suppressVisualItemClick = true;
+        activeRoute = undefined;
+        detailFocusPoint = undefined;
+        closeSheets();
+        try { mapCanvas.setPointerCapture(event.pointerId); } catch (_) {}
+      }
+      const rect = mapCanvas.getBoundingClientRect();
+      viewportPan = {
+        x: visualPanStart.cameraX + dxPixels / (rect.width || 1) * DESIGN.width,
+        y: visualPanStart.cameraY + dyPixels / (rect.height || 1) * DESIGN.height
+      };
+      updateMapCamera();
+    });
+
+    const finishVisualPan = (event) => {
+      if (!visualPanStart || visualPanStart.pointerId !== event.pointerId) return;
+      const moved = visualPanStart.moved;
+      visualPanStart = undefined;
+      try { mapCanvas.releasePointerCapture(event.pointerId); } catch (_) {}
+      if (moved) setTimeout(() => { suppressVisualItemClick = false; }, 220);
+    };
+
+    mapCanvas.addEventListener('pointerup', finishVisualPan);
+    mapCanvas.addEventListener('pointercancel', finishVisualPan);
+
+    let blankPressTimer;
+    let blankPressStart;
+    let suppressBlankClick = false;
+
+    function cancelBlankPress() {
+      clearTimeout(blankPressTimer);
+      blankPressTimer = undefined;
+      blankPressStart = undefined;
+      blankPressIndicator.classList.remove('is-active');
+    }
+
+    mapCanvas.addEventListener('pointerdown', (event) => {
+      cancelBlankPress();
+      if (appMode !== 'edit') return;
+      if (!event.isPrimary || event.button !== 0 || !isBlankMapTarget(event.target)) return;
+      if (activeRoute && !selectedSegmentId) clearActiveRoute(false);
+      const point = designPoint(event);
+      blankPressStart = { pointerId: event.pointerId, clientX: event.clientX, clientY: event.clientY, point };
+      const screenPoint = screenPointForMapPoint(point.x, point.y);
+      blankPressIndicator.style.left = `${screenPoint.x / DESIGN.width * 100}%`;
+      blankPressIndicator.style.top = `${screenPoint.y / DESIGN.height * 100}%`;
+      void blankPressIndicator.offsetWidth;
+      blankPressIndicator.classList.add('is-active');
+      blankPressTimer = setTimeout(() => {
+        if (!blankPressStart) return;
+        const draft = blankPressStart;
+        blankPressTimer = undefined;
+        blankPressStart = undefined;
+        blankPressIndicator.classList.remove('is-active');
+        suppressBlankClick = true;
+        setTimeout(() => { suppressBlankClick = false; }, 900);
+        selectedNodeId = undefined;
+        selectedRoadId = undefined;
+        renderNodes();
+        renderRoads();
+        const dropPoint = designPoint(draft);
+        const layer = nearestVisibleCreatableLayer(dropPoint.y);
+        openMapComposer(undefined, dropPoint.x, layer, selectedSegmentId);
+      }, 560);
+    });
+
+    mapCanvas.addEventListener('pointermove', (event) => {
+      if (!blankPressStart || blankPressStart.pointerId !== event.pointerId) return;
+      if (Math.hypot(event.clientX - blankPressStart.clientX, event.clientY - blankPressStart.clientY) > 8) cancelBlankPress();
+    });
+
+    mapCanvas.addEventListener('pointerup', cancelBlankPress);
+    mapCanvas.addEventListener('pointercancel', cancelBlankPress);
+    mapCanvas.addEventListener('contextmenu', (event) => {
+      if (appMode === 'edit' && isBlankMapTarget(event.target)) event.preventDefault();
+    });
+
+    mapCanvas.addEventListener('click', (event) => {
+      if (!suppressBlankClick) return;
+      suppressBlankClick = false;
+      event.preventDefault();
+      event.stopImmediatePropagation();
+    }, true);
+
+    mapCanvas.addEventListener('click', (event) => {
+      if (isBlankMapTarget(event.target)) {
+        selectedNodeId = undefined;
+        selectedRoadId = undefined;
+        selectedSegmentId = undefined;
+        renderMap();
+        closeSheets();
+        closeMapComposer();
+      }
+    });
+
+    let lastWheelZoom = 0;
+    mapCanvas.addEventListener('wheel', (event) => {
+      if (appMode !== 'visual') return;
+      event.preventDefault();
+      const now = Date.now();
+      if (now - lastWheelZoom < 60) return;
+      lastWheelZoom = now;
+      const rect = mapCanvas.getBoundingClientRect();
+      const anchor = {
+        x: (event.clientX - rect.left) / (rect.width || 1) * DESIGN.width,
+        y: (event.clientY - rect.top) / (rect.height || 1) * DESIGN.height
+      };
+      semanticViewportZoom(event.deltaY < 0 ? 1 : -1, anchor, false);
+    }, { passive: false });
+
+    mapCanvas.addEventListener('dblclick', (event) => {
+      event.preventDefault();
+      if (appMode === 'visual') {
+        const rect = mapCanvas.getBoundingClientRect();
+        semanticViewportZoom(1, {
+          x: (event.clientX - rect.left) / (rect.width || 1) * DESIGN.width,
+          y: (event.clientY - rect.top) / (rect.height || 1) * DESIGN.height
+        }, true);
+      } else {
+        setSemanticZoom(semanticZoom + 1);
+      }
+    });
+
+    let pinchDistance = 0;
+    let pinchSemanticDistance = 0;
+    mapCanvas.addEventListener('touchstart', (event) => {
+      if (appMode !== 'visual' || event.touches.length !== 2) return;
+      visualPanStart = undefined;
+      const a = event.touches[0];
+      const b = event.touches[1];
+      pinchDistance = Math.hypot(a.clientX - b.clientX, a.clientY - b.clientY);
+      pinchSemanticDistance = pinchDistance;
+    }, { passive: true });
+
+    mapCanvas.addEventListener('touchmove', (event) => {
+      if (appMode !== 'visual' || event.touches.length !== 2 || !pinchDistance) return;
+      event.preventDefault();
+      const a = event.touches[0];
+      const b = event.touches[1];
+      const distance = Math.hypot(a.clientX - b.clientX, a.clientY - b.clientY);
+      const ratio = distance / pinchDistance;
+      if (Math.abs(ratio - 1) > 0.015) {
+        const rect = mapCanvas.getBoundingClientRect();
+        setViewportScale(viewportScale * ratio, {
+          x: ((a.clientX + b.clientX) / 2 - rect.left) / (rect.width || 1) * DESIGN.width,
+          y: ((a.clientY + b.clientY) / 2 - rect.top) / (rect.height || 1) * DESIGN.height
+        });
+        pinchDistance = distance;
+      }
+      const semanticRatio = distance / pinchSemanticDistance;
+      if (semanticRatio > 1.16 || semanticRatio < 0.86) {
+        const direction = semanticRatio > 1 ? 1 : -1;
+        const previousLayer = semanticZoom;
+        setSemanticZoom(semanticZoom + direction, false, true);
+        if (semanticZoom !== previousLayer) showToast(`${currentZoomStage().name} · ${direction > 0 ? 'more detail' : 'less detail'}`);
+        pinchSemanticDistance = distance;
+      }
+    }, { passive: false });
+
+    mapCanvas.addEventListener('touchend', (event) => {
+      if (event.touches.length < 2) {
+        pinchDistance = 0;
+        pinchSemanticDistance = 0;
+      }
+    }, { passive: true });
+
+    setAppMode('visual', false);
+  </script>
+</body>
+</html>
