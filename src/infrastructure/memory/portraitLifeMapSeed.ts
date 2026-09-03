@@ -9,7 +9,14 @@ import {
 } from '../../domain/lifeMap/entities';
 import { LifeMap } from '../../domain/lifeMap/LifeMap';
 
-type FixtureNode = [
+/**
+ * Demo data: the deterministic portrait road map the app boots into while
+ * runtime persistence stays in-memory (see docs/specification/life-map.md).
+ * Three roads — marathon training, family rhythm, creative practice — with a
+ * five-level segment hierarchy, cross-road bridges, and attached Records.
+ */
+
+type SeedNode = [
   id: string,
   kind: PlannedKind,
   title: string,
@@ -19,13 +26,13 @@ type FixtureNode = [
   description: string,
 ];
 
-const nodeData: FixtureNode[] = [
-  ['start', 'originStatus', 'Started here', 195, 0, 'success', 'The permanent origin of this journey.'],
+const nodeData: SeedNode[] = [
+  ['start', 'status', 'Started here', 195, 0, 'success', 'The permanent origin of this journey.'],
   ['choose', 'task', 'Choose a focus', 45, 1, 'success', 'Name the area that matters most before moving forward.'],
   ['plan-home', 'task', 'Make family time', 195, 1, 'success', 'Reserve dependable time for the people who matter most.'],
   ['explore-kyoto', 'task', 'Explore Kyoto move', 345, 1, 'todo', 'An isolated idea waiting to be connected to a road.'],
   ['health-route', 'task', 'Build consistency', 55, 2, 'success', 'Create a repeatable weekly health rhythm.'],
-  ['family-route', 'checkpoint', 'Calendar aligned', 195, 2, 'success', 'Shared family time is now protected.'],
+  ['family-route', 'status', 'Calendar aligned', 195, 2, 'success', 'Shared family time is now protected.'],
   ['work-route', 'task', 'Shape my practice', 335, 2, 'success', 'Turn creative work into a deliberate practice.'],
   ['base-mileage', 'task', 'Build weekly base', 55, 3, 'success', 'Increase weekly distance sustainably.'],
   ['run', 'task', 'Run three times', 35, 4, 'success', 'Complete three comfortable runs each week.'],
@@ -33,7 +40,7 @@ const nodeData: FixtureNode[] = [
   ['weekly-dinner', 'task', 'Weekly dinner', 195, 4, 'failed', 'Share one unhurried meal together every week.'],
   ['portfolio', 'task', 'Publish a case study', 275, 4, 'success', 'Show the thinking behind one meaningful project.'],
   ['interviews', 'task', 'Talk to designers', 355, 4, 'failed', 'Learn from three designers doing work I admire.'],
-  ['ten-k-checkpoint', 'checkpoint', '10K checkpoint', 55, 5, 'failed', 'A checkpoint confirming whether the endurance base works.'],
+  ['ten-k-checkpoint', 'status', '10K checkpoint', 55, 5, 'failed', 'A checkpoint confirming whether the endurance base works.'],
   ['half-marathon-plan', 'task', 'Prepare for 21K', 55, 6, 'todo', 'Build safely toward half-marathon distance.'],
   ['health', 'goal', 'Healthy rhythm', 55, 7, 'todo', 'A stable rhythm where energy and movement feel natural.'],
   ['connected-home', 'goal', 'Connected home', 195, 7, 'todo', 'A home rhythm with space for shared experiences.'],
@@ -50,10 +57,11 @@ const nodes: PlannedNode[] = nodeData.map(([id, kind, title, , , outcome, descri
   title,
   description,
   outcome,
+  permanent: id === 'start' ? true : undefined,
 }));
 
-type FixtureConnection = [id: string, from: string, to: string, meaning: string];
-const connectionData: FixtureConnection[] = [
+type SeedConnection = [id: string, from: string, to: string, meaning: string];
+const connectionData: SeedConnection[] = [
   ['r1', 'start', 'choose', 'begins with'],
   ['r2', 'choose', 'health-route', 'opens health road'],
   ['r3', 'choose', 'work-route', 'opens work road'],
@@ -208,8 +216,8 @@ const layout: MapLayoutSnapshot = {
   bends: [],
 };
 
-export const createPortraitRoadMapSnapshot = (): LifeMapSnapshot => LifeMap.create(snapshot).snapshot();
-export const createPortraitRoadMapLayout = (): MapLayoutSnapshot => ({
+export const createPortraitLifeMapSnapshot = (): LifeMapSnapshot => LifeMap.create(snapshot).snapshot();
+export const createPortraitLifeMapLayout = (): MapLayoutSnapshot => ({
   ...layout,
   placements: layout.placements.map((placement) => ({ ...placement })),
   recordPlacements: layout.recordPlacements.map((placement) => ({ ...placement })),

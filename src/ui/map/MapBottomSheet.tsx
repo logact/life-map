@@ -1,8 +1,9 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { PortraitMapProjection } from '../../application/map/projectionTypes';
+import { RoadPreview } from '../../application/map/FindRoadService';
 import { Outcome, PlannedKind } from '../../domain/lifeMap/entities';
-import { RuntimeNodeOption } from '../composition/createLifeMapRuntime';
+import { RuntimeNodeOption, RuntimeSegmentOption } from '../composition/createLifeMapRuntime';
 import { MapComposer } from './MapComposer';
 import { mapTheme, outcomeColor } from './mapTheme';
 import { LifeMapSessionState } from './useLifeMapSession';
@@ -11,8 +12,10 @@ interface MapBottomSheetProps {
   session: LifeMapSessionState;
   projection: PortraitMapProjection;
   options: RuntimeNodeOption[];
+  segments: RuntimeSegmentOption[];
   onClose: () => void;
   onFindRoad: (fromNodeId: string, toNodeId: string) => void;
+  onQueryRoutes: (fromNodeId: string) => Promise<RoadPreview[]>;
   onToggleFilter: (outcome: Outcome) => void;
   onChangeOutcome: (nodeId: string, outcome: Outcome) => void;
   onEditNode: (nodeId: string, value: { title: string; description: string; kind: PlannedKind }) => void;
@@ -21,11 +24,12 @@ interface MapBottomSheetProps {
   onBend: (connectionId: string, offsetX: number) => void;
   onAddRecord: (targetId: string, summary: string) => void;
   onOpenRecord: () => void;
-  onCreate: (value: { title: string; kind: Exclude<PlannedKind, 'originStatus'>; outcome: Outcome }) => void;
+  onCreate: (value: { title: string; kind: PlannedKind; outcome: Outcome }) => void;
   onConnect: (fromNodeId: string, toNodeId: string) => void;
   onArmDelete: (id: string) => void;
   onSheetHeight: (height: number) => void;
-  onComposerDraft: (value: { title: string; kind: Exclude<PlannedKind, 'originStatus'>; outcome: Outcome }) => void;
+  onComposerDraft: (value: { title: string; kind: PlannedKind; outcome: Outcome }) => void;
+  onMoveNodeToSegment: (nodeId: string, segmentId: string) => void;
 }
 
 const nextOutcome: Record<Outcome, Outcome> = { success: 'todo', todo: 'failed', failed: 'success' };
@@ -34,8 +38,10 @@ export const MapBottomSheet = ({
   session,
   projection,
   options,
+  segments,
   onClose,
   onFindRoad,
+  onQueryRoutes,
   onToggleFilter,
   onChangeOutcome,
   onEditNode,
@@ -49,8 +55,10 @@ export const MapBottomSheet = ({
   onArmDelete,
   onSheetHeight,
   onComposerDraft,
+  onMoveNodeToSegment,
 }: MapBottomSheetProps) => {
-  const [query, setQuery] = useState('');
+  const [startQuery, setStartQuery] = useState('');
+  const [endQuery, setEndQuery] = useState('');
   const [routeFrom, setRouteFrom] = useState('start');
   const [recordText, setRecordText] = useState('');
   const selectedNode = session.selection?.type === 'node'
@@ -75,9 +83,25 @@ export const MapBottomSheet = ({
     if (!recordTarget && recordTargets[0]) setRecordTarget(recordTargets[0].id);
   }, [recordTarget, recordTargets]);
 
-  const routeTargets = useMemo(() => options.filter((option) =>
-    option.id !== routeFrom && option.title.toLowerCase().includes(query.trim().toLowerCase()),
-  ), [options, query, routeFrom]);
+  const routeTargets = useMemo(() => options
+    .filter((option) => option.id !== routeFrom && option.title.toLowerCase().includes(endQuery.trim().toLowerCase()))
+    .sort((left, right) => right.depthRank - left.depthRank || left.title.localeCompare(right.title)),
+  [options, endQuery, routeFrom]);
+  const startMatches = useMemo(() => options
+    .filter((option) => option.id !== routeFrom && option.title.toLowerCase().includes(startQuery.trim().toLowerCase()))
+    .sort((left, right) => left.depthRank - right.depthRank || left.title.localeCompare(right.title)),
+  [options, startQuery, routeFrom]);
+  const [previews, setPreviews] = useState<Record<string, RoadPreview> | undefined>(undefined);
+  const routeFromTitle = options.find((option) => option.id === routeFrom)?.title ?? 'Start';
+  useEffect(() => {
+    if (session.sheet !== 'route') return undefined;
+    setPreviews(undefined);
+    let live = true;
+    void onQueryRoutes(routeFrom).then((result) => {
+      if (live) setPreviews(Object.fromEntries(result.map((preview) => [preview.toNodeId, preview])));
+    });
+    return () => { live = false; };
+  }, [session.sheet, routeFrom, onQueryRoutes]);
   if (!session.sheet) return null;
 
   const selectedConnection = session.selection?.type === 'connection'
@@ -86,26 +110,34 @@ export const MapBottomSheet = ({
   const selectedSummary = session.selection?.type === 'summary'
     ? projection.summaryConnections.find((connection) => connection.id === session.selection?.id)
     : undefined;
-  const selectedSegment = session.selection?.type === 'segment'
-    ? projection.segmentOverlays.find((segment) => segment.id === session.selection?.id)
-    : undefined;
   const selectedRecord = session.selection?.type === 'record'
     ? projection.recordAttachments.find((record) => record.id === session.selection?.id)
     : undefined;
+  // The layers a node can be filed into, grouped by segment depth (L0 = root).
+  const layerGroups = new Map<number, RuntimeSegmentOption[]>();
+  for (const segment of segments) {
+    layerGroups.set(segment.depth, [...(layerGroups.get(segment.depth) ?? []), segment]);
+  }
 
-  const title = session.sheet === 'route' ? 'Find a road'
+  const title = session.sheet === 'route' ? 'Query roads'
     : session.sheet === 'legend' ? 'Map legend'
       : session.sheet === 'record' ? 'Attach a Record'
         : session.sheet === 'composer' ? 'Add a planned point'
-          : selectedNode?.title ?? selectedConnection?.meaning ?? selectedSummary?.meaning ?? selectedSegment?.title ?? selectedRecord?.summary ?? 'Map detail';
+          : selectedNode?.title ?? selectedConnection?.meaning ?? selectedSummary?.meaning ?? selectedRecord?.summary ?? 'Map detail';
 
   return (
     <View style={styles.scrim} pointerEvents="box-none">
-      <View
-        accessibilityViewIsModal
-        style={styles.sheet}
-        onLayout={(event) => onSheetHeight(event.nativeEvent.layout.height)}
+      <KeyboardAvoidingView
+        // Android resizes the window for the keyboard; iOS needs the lift.
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        pointerEvents="box-none"
+        style={styles.avoider}
       >
+        <View
+          accessibilityViewIsModal
+          style={styles.sheet}
+          onLayout={(event) => onSheetHeight(event.nativeEvent.layout.height)}
+        >
         <View style={styles.handle} />
         <View style={styles.sheetHeader}>
           <View style={styles.titleCopy}>
@@ -119,20 +151,59 @@ export const MapBottomSheet = ({
         <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={styles.content}>
           {session.sheet === 'route' && (
             <>
-              <Text style={styles.label}>From</Text>
-              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chips}>
-                {options.map((option) => <Chip key={option.id} active={routeFrom === option.id} label={option.title} onPress={() => setRouteFrom(option.id)} />)}
-              </ScrollView>
-              <Text style={styles.label}>To</Text>
-              <TextInput accessibilityLabel="Search destination" value={query} onChangeText={setQuery} placeholder="Search a task, checkpoint, or goal" placeholderTextColor={mapTheme.faint} style={styles.input} />
+              <Text style={styles.label}>Start</Text>
+              <TextInput
+                accessibilityLabel="Search start point"
+                value={startQuery}
+                onChangeText={setStartQuery}
+                placeholder={`From: ${routeFromTitle}`}
+                placeholderTextColor={mapTheme.faint}
+                returnKeyType="done"
+                style={styles.input}
+              />
+              {startQuery.trim() !== '' && (
+                <View style={styles.results}>
+                  {startMatches.length === 0 && <Text style={styles.empty}>No matching start point</Text>}
+                  {startMatches.map((option) => (
+                    <Pressable key={option.id} accessibilityRole="button" accessibilityLabel={`Start from ${option.title}`} onPress={() => { setRouteFrom(option.id); setStartQuery(''); }} style={styles.result}>
+                      <View style={[styles.resultIcon, { borderColor: outcomeColor[option.outcome] }]}><Text style={{ color: outcomeColor[option.outcome] }}>›</Text></View>
+                      <View style={styles.resultCopy}><Text style={styles.resultTitle}>{option.title}</Text><Text style={styles.resultMeta}>{option.kind}</Text></View>
+                      <Text style={styles.resultArrow}>›</Text>
+                    </Pressable>
+                  ))}
+                </View>
+              )}
+              <Text style={styles.label}>End</Text>
+              <TextInput
+                accessibilityLabel="Search destination"
+                value={endQuery}
+                onChangeText={setEndQuery}
+                placeholder="Search a task, status point, or goal"
+                placeholderTextColor={mapTheme.faint}
+                returnKeyType="go"
+                onSubmitEditing={() => {
+                  const first = routeTargets[0];
+                  if (first) onFindRoad(routeFrom, first.id);
+                }}
+                style={styles.input}
+              />
               <View style={styles.results}>
-                {routeTargets.map((option) => (
-                  <Pressable key={option.id} accessibilityRole="button" accessibilityLabel={`Find road to ${option.title}`} onPress={() => onFindRoad(routeFrom, option.id)} style={styles.result}>
-                    <View style={[styles.resultIcon, { borderColor: outcomeColor[option.outcome] }]}><Text style={{ color: outcomeColor[option.outcome] }}>›</Text></View>
-                    <View style={styles.resultCopy}><Text style={styles.resultTitle}>{option.title}</Text><Text style={styles.resultMeta}>{option.depthRank} depth · {option.kind}</Text></View>
-                    <Text style={styles.resultArrow}>›</Text>
-                  </Pressable>
-                ))}
+                {routeTargets.length === 0 && <Text style={styles.empty}>No matching destination</Text>}
+                {routeTargets.map((option) => {
+                  const preview = previews?.[option.id];
+                  const meta = previews === undefined
+                    ? '…'
+                    : preview
+                      ? `${preview.connectionCount} connection${preview.connectionCount === 1 ? '' : 's'} from ${routeFromTitle}`
+                      : `No road from ${routeFromTitle} yet`;
+                  return (
+                    <Pressable key={option.id} accessibilityRole="button" accessibilityLabel={`Find road to ${option.title}`} onPress={() => onFindRoad(routeFrom, option.id)} style={styles.result}>
+                      <View style={[styles.resultIcon, { borderColor: outcomeColor[option.outcome] }]}><Text style={{ color: outcomeColor[option.outcome] }}>›</Text></View>
+                      <View style={styles.resultCopy}><Text style={styles.resultTitle}>{option.title}</Text><Text style={styles.resultMeta}>{meta}</Text></View>
+                      <Text style={styles.resultArrow}>›</Text>
+                    </Pressable>
+                  );
+                })}
               </View>
             </>
           )}
@@ -148,7 +219,7 @@ export const MapBottomSheet = ({
               </View>
               <View style={styles.legendGrid}>
                 <LegendStat value="○" label="Goal" /><LegendStat value="›" label="Task" />
-                <LegendStat value="◇" label="Status checkpoint" /><LegendStat value="▤" label="Record" />
+                <LegendStat value="◇" label="Status" /><LegendStat value="▤" label="Record" />
                 <LegendStat value={`L${session.semanticLevel}`} label="Hierarchy level" /><LegendStat value="⌁" label="Summary road" />
               </View>
             </>
@@ -171,7 +242,7 @@ export const MapBottomSheet = ({
           {session.sheet === 'detail' && selectedNode && (
             <>
               <Text style={styles.body}>{selectedNode.description || 'No description yet.'}</Text>
-              <View style={styles.metadata}><Text style={styles.metaKey}>Kind</Text><Text style={styles.metaValue}>{selectedNode.kind === 'checkpoint' ? 'Status checkpoint' : selectedNode.kind}</Text><Text style={styles.metaKey}>Outcome</Text><Text style={[styles.metaValue, { color: outcomeColor[selectedNode.outcome] }]}>{selectedNode.outcome}</Text></View>
+              <View style={styles.metadata}><Text style={styles.metaKey}>Kind</Text><Text style={styles.metaValue}>{selectedNode.kind === 'status' ? 'Status' : selectedNode.kind}</Text><Text style={styles.metaKey}>Outcome</Text><Text style={[styles.metaValue, { color: outcomeColor[selectedNode.outcome] }]}>{selectedNode.outcome}</Text></View>
               <PrimaryButton label="Go to here" onPress={() => onFindRoad('start', selectedNode.id)} />
               {(selectedNode.kind === 'goal' || selectedNode.kind === 'task') && <SecondaryButton label="Add a Record" onPress={onOpenRecord} />}
               {session.mode === 'edit' && (
@@ -180,13 +251,35 @@ export const MapBottomSheet = ({
                   <TextInput accessibilityLabel="Edit node title" value={editTitle} onChangeText={setEditTitle} style={styles.input} />
                   <Text style={styles.label}>Kind</Text>
                   <View style={styles.chips}>
-                    {selectedNode.kind === 'originStatus'
+                    {selectedNode.permanent
                       ? <Chip active label="Permanent Start" onPress={() => undefined} />
-                      : (['task', 'checkpoint', 'goal'] as const).map((kind) => <Chip key={kind} active={editKind === kind} label={kind} onPress={() => setEditKind(kind)} />)}
+                      : (['task', 'status', 'goal'] as const).map((kind) => <Chip key={kind} active={editKind === kind} label={kind} onPress={() => setEditKind(kind)} />)}
                   </View>
                   <PrimaryButton label="Save node" onPress={() => onEditNode(selectedNode.id, { title: editTitle, description: editDescription, kind: editKind })} />
                   <SecondaryButton label={`Cycle outcome → ${nextOutcome[selectedNode.outcome]}`} onPress={() => onChangeOutcome(selectedNode.id, nextOutcome[selectedNode.outcome])} />
-                  {selectedNode.kind !== 'originStatus' && (
+                  {segments.length > 0 && (
+                    <>
+                      <Text style={styles.label}>Move to layer</Text>
+                      <View style={styles.layerGroups}>
+                        {[...layerGroups.entries()].map(([depth, layerSegments]) => (
+                          <View key={`layer:${depth}`} style={styles.layerRow}>
+                            <Text style={styles.layerTag}>L{depth}</Text>
+                            <View style={styles.layerChips}>
+                              {layerSegments.map((segment) => (
+                                <Chip
+                                  key={segment.id}
+                                  label={segment.title}
+                                  active={false}
+                                  onPress={() => onMoveNodeToSegment(selectedNode.id, segment.id)}
+                                />
+                              ))}
+                            </View>
+                          </View>
+                        ))}
+                      </View>
+                    </>
+                  )}
+                  {!selectedNode.permanent && (
                     <>
                       <Text style={styles.label}>Connect to a forward point</Text>
                       <View style={styles.chips}>
@@ -219,10 +312,10 @@ export const MapBottomSheet = ({
           {session.sheet === 'detail' && selectedSummary && (
             <><Text style={styles.body}>{selectedSummary.hiddenCount} planned points and {selectedSummary.hiddenConnectionIds.length} canonical connections are summarized here.</Text><Text style={styles.label}>Select this road to descend one hierarchy level.</Text></>
           )}
-          {session.sheet === 'detail' && selectedSegment && <><Text style={styles.body}>{selectedSegment.description}</Text><Text style={styles.label}>{selectedSegment.memberCount} members · hierarchy level {selectedSegment.hierarchyLevel}</Text></>}
           {session.sheet === 'detail' && selectedRecord && <><Text style={styles.body}>{selectedRecord.content ?? selectedRecord.summary}</Text><Text style={styles.label}>Exact target: {options.find((option) => option.id === selectedRecord.targetId)?.title}</Text></>}
         </ScrollView>
-      </View>
+        </View>
+      </KeyboardAvoidingView>
     </View>
   );
 };
@@ -233,12 +326,13 @@ const Chip = ({ active, label, color, onPress }: { active: boolean; label: strin
   </Pressable>
 );
 const PrimaryButton = ({ label, onPress, disabled }: { label: string; onPress: () => void; disabled?: boolean }) => <Pressable accessibilityRole="button" disabled={disabled} onPress={onPress} style={[styles.primary, disabled && { opacity: 0.4 }]}><Text style={styles.primaryText}>{label}</Text></Pressable>;
-const SecondaryButton = ({ label, onPress }: { label: string; onPress: () => void }) => <Pressable accessibilityRole="button" onPress={onPress} style={styles.secondary}><Text style={styles.secondaryText}>{label}</Text></Pressable>;
+const SecondaryButton = ({ label, onPress, disabled }: { label: string; onPress: () => void; disabled?: boolean }) => <Pressable accessibilityRole="button" disabled={disabled} onPress={onPress} style={[styles.secondary, disabled && { opacity: 0.4 }]}><Text style={styles.secondaryText}>{label}</Text></Pressable>;
 const DangerButton = ({ armed, onPress }: { armed: boolean; onPress: () => void }) => <Pressable accessibilityRole="button" onPress={onPress} style={[styles.secondary, armed && styles.danger]}><Text style={[styles.secondaryText, armed && styles.dangerText]}>{armed ? 'Tap again to confirm' : 'Delete / archive'}</Text></Pressable>;
 const LegendStat = ({ value, label }: { value: string; label: string }) => <View style={styles.legendStat}><Text style={styles.legendValue}>{value}</Text><Text style={styles.legendLabel}>{label}</Text></View>;
 
 const styles = StyleSheet.create({
-  scrim: { ...StyleSheet.absoluteFillObject, justifyContent: 'flex-end', zIndex: 50, backgroundColor: 'rgba(23,63,53,0.12)' },
+  scrim: { ...StyleSheet.absoluteFillObject, zIndex: 50, backgroundColor: 'rgba(23,63,53,0.12)' },
+  avoider: { flex: 1, justifyContent: 'flex-end' },
   sheet: { maxHeight: '62%', minHeight: 250, paddingTop: 7, borderTopLeftRadius: 25, borderTopRightRadius: 25, backgroundColor: mapTheme.paperStrong, shadowColor: '#000', shadowOpacity: 0.22, shadowRadius: 18 },
   handle: { alignSelf: 'center', width: 38, height: 4, borderRadius: 2, backgroundColor: 'rgba(37,92,76,0.2)' },
   sheetHeader: { minHeight: 58, paddingHorizontal: 17, flexDirection: 'row', alignItems: 'center' },
@@ -253,10 +347,15 @@ const styles = StyleSheet.create({
   input: { minHeight: 44, paddingHorizontal: 12, borderRadius: 12, borderWidth: 1, borderColor: 'rgba(37,92,76,0.16)', color: mapTheme.ink, backgroundColor: mapTheme.paper, fontSize: 11 },
   textarea: { minHeight: 84, paddingTop: 11, textAlignVertical: 'top' },
   chips: { flexDirection: 'row', gap: 7 },
+  layerGroups: { gap: 8 },
+  layerRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 8 },
+  layerChips: { flex: 1, flexDirection: 'row', flexWrap: 'wrap', gap: 7 },
+  layerTag: { width: 20, marginTop: 12, color: mapTheme.faint, fontSize: 8, fontWeight: '900' },
   chip: { maxWidth: 140, minHeight: 38, paddingHorizontal: 11, borderRadius: 12, borderWidth: 1, borderColor: 'rgba(37,92,76,0.14)', alignItems: 'center', justifyContent: 'center' },
   chipText: { color: mapTheme.muted, fontSize: 9, fontWeight: '800' },
   results: { marginTop: 8, gap: 6 },
   result: { minHeight: 54, padding: 8, borderRadius: 14, flexDirection: 'row', alignItems: 'center', backgroundColor: mapTheme.paper },
+  empty: { padding: 12, color: mapTheme.muted, fontSize: 10, fontWeight: '700', textAlign: 'center' },
   resultIcon: { width: 34, height: 34, borderRadius: 17, borderWidth: 2, alignItems: 'center', justifyContent: 'center' },
   resultCopy: { flex: 1, marginLeft: 9 },
   resultTitle: { color: mapTheme.ink, fontSize: 10, fontWeight: '800' },

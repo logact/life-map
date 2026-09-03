@@ -12,10 +12,11 @@ describe('Life Map session reducer', () => {
     expect(edited.sheet).toBeUndefined();
   });
 
-  it('clamps hierarchy level independently from camera scale', () => {
-    const deep = lifeMapSessionReducer(initialLifeMapSession, { type: 'set-level', level: 9 });
-    expect(deep.semanticLevel).toBe(4);
-    expect(deep.camera).toEqual(initialLifeMapSession.camera);
+  it('derives the hierarchy level from camera scale', () => {
+    const zoomedOut = lifeMapSessionReducer(initialLifeMapSession, { type: 'set-camera', camera: { centerX: 195, centerY: 360, scale: 0.7 } });
+    expect(zoomedOut.semanticLevel).toBe(0);
+    const zoomedIn = lifeMapSessionReducer(zoomedOut, { type: 'set-camera', camera: { centerX: 195, centerY: 360, scale: 2.1 } });
+    expect(zoomedIn.semanticLevel).toBe(4);
   });
 
   it('supports outcome filters and armed second-tap deletion', () => {

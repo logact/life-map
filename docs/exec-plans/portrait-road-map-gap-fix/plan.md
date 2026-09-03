@@ -48,6 +48,21 @@ behavior; this plan covers what is still missing, verified by direct comparison 
   draft-path flow, blank-hold ring — none exist; no reduced-motion handling.
 - **G11. Test coverage.** No gesture, composer-validation, route-search UI,
   delete-confirmation UI, or prototype-state comparison tests.
+- **G12. Route-search query.** The prototype queries `findRoute` for every listed
+  destination and shows the result inline (`N connections from X` /
+  `No road from X yet`), sorts deepest-first, offers an empty state, and activates
+  the first result on Enter; the implementation only filtered titles.
+- **G13. Canvas touch gestures.** Pan, pinch, and double-tap zoom were wired onto
+  the canvas's root `Pressable`, whose Pressability responder handlers override any
+  spread `PanResponder` handlers — touch gestures never fired (wheel and the +/−
+  buttons were unaffected). The pan responder must live on a plain wrapper `View`,
+  with double-tap detection moved to the inner Pressable's `onPress`.
+- **G14. Duplicate summary roads.** Parallel hidden branches between the same
+  visible endpoints (e.g. portfolio and interviews between work-route and work at
+  level 1) produced one summary per connected component with identical IDs —
+  duplicate React keys and overlapping curves. The prototype merges them into one
+  corridor per boundary pair; the projection now groups hidden components by their
+  visible boundary pair before summarizing.
 
 Out of scope (Phase 0 reconciliation decisions): 42% progress bar (replaced by factual
 copy), coupled semantic/camera zoom, phone frame chrome, persistence (deferred), and other

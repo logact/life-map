@@ -47,11 +47,29 @@ Base cycle report: [`../portrait-road-map/cycle-report.md`](../portrait-road-map
   `MapBottomSheet` (armed delete, edge insert action), session reducer (draft path,
   composer draft, sheet height), and screen flows (hint copy, route search UI,
   composer validation, edit-mode selection).
+- **G12 route-search query** (found after the initial gap-fix pass) —
+  `FindRoadService.previewAll` computes the best route cost to every reachable
+  destination in one pass; the route sheet queries it live and shows
+  `N connections from X` / `No road from X yet` per destination, sorts
+  deepest-first, shows a `No matching destination` empty state, activates the first
+  result on submit, and uses the prototype's toast copy
+  (`Showing road to X`, `No road from A to B yet · connect this node first`).
+- **G13 canvas touch gestures** (found after the initial gap-fix pass) — pan,
+  pinch, and double-tap zoom never fired because the pan responder was spread onto
+  the canvas's root `Pressable` and Pressability overrides those handlers. The pan
+  responder now lives on a plain wrapper `View`, and double-tap zoom moved to the
+  inner Pressable's `onPress`. Wheel zoom and the camera buttons were unaffected.
+- **G14 duplicate summary roads** (reported from the running app as React
+  duplicate-key errors) — parallel hidden branches between the same visible
+  endpoints produced one summary per connected component with identical
+  `summary:road:from:to` IDs. The projection now merges hidden components sharing a
+  boundary pair into one summary road, matching the prototype, with regression
+  coverage that summary IDs are unique at every semantic level.
 
 ## Verification
 
 - `npm run check` — typecheck clean; dependency-cruiser: 36 modules, no violations;
-  Jest: 12 suites, 46 tests, all passing.
+  Jest: 12 suites, 54 tests, all passing.
 - `npx expo export --platform web` — web bundle builds cleanly.
 
 ## Deviations

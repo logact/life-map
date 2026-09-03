@@ -1,5 +1,6 @@
 import React from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
+import Svg, { Circle, Line } from 'react-native-svg';
 import { HeaderSummary } from '../../application/map/projectionTypes';
 import { mapTheme } from './mapTheme';
 
@@ -7,11 +8,10 @@ interface MapHeaderProps {
   summary: HeaderSummary;
   onRoute: () => void;
   onReset: () => void;
-  onLegend: () => void;
   onClearRoute: () => void;
 }
 
-export const MapHeader = ({ summary, onRoute, onReset, onLegend, onClearRoute }: MapHeaderProps) => (
+export const MapHeader = ({ summary, onRoute, onReset, onClearRoute }: MapHeaderProps) => (
   <View style={styles.header}>
     <View style={styles.identityRow}>
       <View style={styles.identity}>
@@ -19,9 +19,8 @@ export const MapHeader = ({ summary, onRoute, onReset, onLegend, onClearRoute }:
         <Text style={styles.title}>The roads ahead</Text>
       </View>
       <View style={styles.actions}>
-        <HeaderButton label="Find a road" glyph="⌁" onPress={onRoute} />
+        <HeaderButton label="Query roads" icon={<QueryGlyph />} onPress={onRoute} />
         <HeaderButton label="Reset camera" glyph="↺" onPress={onReset} />
-        <HeaderButton label="Legend and filters" glyph="◫" onPress={onLegend} />
       </View>
     </View>
     <View style={[styles.summary, summary.activeRoute && styles.routeSummary]}>
@@ -38,10 +37,17 @@ export const MapHeader = ({ summary, onRoute, onReset, onLegend, onClearRoute }:
   </View>
 );
 
-const HeaderButton = ({ label, glyph, onPress }: { label: string; glyph: string; onPress: () => void }) => (
+const HeaderButton = ({ label, glyph, icon, onPress }: { label: string; glyph?: string; icon?: React.ReactNode; onPress: () => void }) => (
   <Pressable accessibilityRole="button" accessibilityLabel={label} onPress={onPress} style={styles.headerButton}>
-    <Text style={styles.headerGlyph}>{glyph}</Text>
+    {icon ?? <Text style={styles.headerGlyph}>{glyph}</Text>}
   </Pressable>
+);
+
+const QueryGlyph = () => (
+  <Svg width={19} height={19} viewBox="0 0 24 24">
+    <Circle cx={11} cy={11} r={7} fill="none" stroke={mapTheme.forest} strokeWidth={2.4} />
+    <Line x1={16.2} y1={16.2} x2={21} y2={21} stroke={mapTheme.forest} strokeWidth={2.4} strokeLinecap="round" />
+  </Svg>
 );
 
 const styles = StyleSheet.create({

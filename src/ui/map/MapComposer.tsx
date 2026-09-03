@@ -4,13 +4,13 @@ import { Outcome, PlannedKind } from '../../domain/lifeMap/entities';
 import { mapTheme, outcomeColor } from './mapTheme';
 
 interface MapComposerProps {
-  onSubmit: (value: { title: string; kind: Exclude<PlannedKind, 'originStatus'>; outcome: Outcome }) => void;
-  onPreviewChange?: (value: { title: string; kind: Exclude<PlannedKind, 'originStatus'>; outcome: Outcome }) => void;
+  onSubmit: (value: { title: string; kind: PlannedKind; outcome: Outcome }) => void;
+  onPreviewChange?: (value: { title: string; kind: PlannedKind; outcome: Outcome }) => void;
 }
 
 export const MapComposer = ({ onSubmit, onPreviewChange }: MapComposerProps) => {
   const [title, setTitle] = useState('New step');
-  const [kind, setKind] = useState<Exclude<PlannedKind, 'originStatus'>>('task');
+  const [kind, setKind] = useState<PlannedKind>('task');
   const [outcome, setOutcome] = useState<Outcome>('todo');
   useEffect(() => {
     onPreviewChange?.({ title, kind, outcome });
@@ -21,8 +21,8 @@ export const MapComposer = ({ onSubmit, onPreviewChange }: MapComposerProps) => 
       <TextInput accessibilityLabel="New node title" value={title} onChangeText={setTitle} style={styles.input} />
       <Text style={styles.label}>Marker kind</Text>
       <View style={styles.chips}>
-        {(['task', 'checkpoint', 'goal'] as const).map((candidate) => (
-          <Chip key={candidate} active={kind === candidate} label={candidate === 'checkpoint' ? 'Status checkpoint' : candidate} onPress={() => setKind(candidate)} />
+        {(['task', 'status', 'goal'] as const).map((candidate) => (
+          <Chip key={candidate} active={kind === candidate} label={candidate === 'status' ? 'Status' : candidate} onPress={() => setKind(candidate)} />
         ))}
       </View>
       <Text style={styles.label}>Outcome</Text>

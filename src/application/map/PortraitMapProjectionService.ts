@@ -30,8 +30,6 @@ export interface ProjectionRequest {
   previousProjection?: PortraitMapProjection;
 }
 
-const stageOneRanks = new Set([0, 1, 2, 7, 8]);
-
 const hierarchyLevel = (segment: RoadSegment, segments: Map<string, RoadSegment>): number => {
   let level = 0;
   let current = segment;
@@ -65,14 +63,25 @@ export class PortraitMapProjectionService {
     const nodeById = new Map(request.snapshot.nodes.map((node) => [node.id, node]));
     const placementById = new Map(request.layout.placements.map((placement) => [placement.nodeId, placement]));
     const activeNodes = request.snapshot.nodes.filter((node) => !node.archivedAt && placementById.has(node.id));
-    const maxRank = Math.max(...request.layout.placements.map((placement) => placement.depthRank));
+    const segmentById = new Map(request.snapshot.segments.map((segment) => [segment.id, segment]));
+    const focusedRoadId = request.focusedRoadId
+      ?? (request.focus?.type === 'segment' ? segmentById.get(request.focus.id)?.roadId : undefined)
+      ?? request.snapshot.roads.find((road) => road.featured)?.id
+      ?? request.snapshot.roads[0]?.id;
+    // A node's layer is the depth of its deepest segment within the focused
+    // road's tree; the hierarchy is the user's filing, so organizing the map
+    // is deciding what each zoom level shows. Points outside that tree
+    // (unfiled or filed in another road) surface at layer 0.
+    const nodeLayer = new Map<string, number>();
+    for (const segment of request.snapshot.segments) {
+      if (segment.roadId !== focusedRoadId) continue;
+      const depth = hierarchyLevel(segment, segmentById);
+      for (const memberId of segment.memberNodeIds) {
+        nodeLayer.set(memberId, Math.max(nodeLayer.get(memberId) ?? 0, depth));
+      }
+    }
     const visibleIds = new Set(
-      activeNodes.filter((node) => {
-        const rank = placementById.get(node.id)!.depthRank;
-        if (level === 0) return node.kind === 'originStatus' || rank === maxRank;
-        if (level === 1) return stageOneRanks.has(rank);
-        return true;
-      }).map((node) => node.id),
+      activeNodes.filter((node) => node.permanent || (nodeLayer.get(node.id) ?? 0) <= level).map((node) => node.id),
     );
     if (request.focus?.type === 'node' && nodeById.get(request.focus.id) && !nodeById.get(request.focus.id)?.archivedAt) {
       visibleIds.add(request.focus.id);
@@ -80,7 +89,7 @@ export class PortraitMapProjectionService {
 
     const optionalLabelIds = new Set(
       [...visibleIds]
-        .filter((id) => nodeById.get(id)?.kind !== 'originStatus' && nodeById.get(id)?.kind !== 'goal')
+        .filter((id) => !nodeById.get(id)?.permanent && nodeById.get(id)?.kind !== 'goal')
         .sort((left, right) => {
           const leftX = placementById.get(left)?.worldX ?? 0;
           const rightX = placementById.get(right)?.worldX ?? 0;
@@ -108,10 +117,11 @@ export class PortraitMapProjectionService {
           description: node.description,
           kind: node.kind,
           outcome: node.outcome,
+          permanent: node.permanent,
           worldX: placement.worldX,
           worldY,
           depthRank: placement.depthRank,
-          showLabel: level >= 2 || node.kind === 'originStatus' || node.kind === 'goal' || optionalLabelIds.has(node.id),
+          showLabel: level >= 2 || node.permanent || node.kind === 'goal' || optionalLabelIds.has(node.id),
           filtered: !filters.has(node.outcome),
           onActiveRoute: activeRouteNodes.has(node.id),
           ...screen,
@@ -134,26 +144,25 @@ export class PortraitMapProjectionService {
         );
       });
 
-    const summaryConnections = level < 2
-      ? request.snapshot.roads.flatMap((road) => this.summariesForRoad(
-        road,
-        request,
-        visibleIds,
-        nodeById,
-        placementById,
-        projectedNodeById,
-        filters,
-      ))
-      : [];
+    // Summary roads bridge hidden chains at every level; at levels where the
+    // focused road is fully revealed no components form, so none are produced.
+    const summaryConnections = request.snapshot.roads.flatMap((road) => this.summariesForRoad(
+      road,
+      request,
+      visibleIds,
+      nodeById,
+      placementById,
+      projectedNodeById,
+      filters,
+    ));
 
-    const segmentById = new Map(request.snapshot.segments.map((segment) => [segment.id, segment]));
-    const focusedRoadId = request.focusedRoadId
-      ?? (request.focus?.type === 'segment' ? segmentById.get(request.focus.id)?.roadId : undefined)
-      ?? request.snapshot.roads.find((road) => road.featured)?.id
-      ?? request.snapshot.roads[0]?.id;
+    // Layers nest: ancestor levels stay visible as dimmed context frames behind
+    // the current level, so zooming reads as descending into the hierarchy.
     const segmentOverlays = request.snapshot.segments
-      .filter((segment) => segment.roadId === focusedRoadId && hierarchyLevel(segment, segmentById) === level)
-      .map((segment) => {
+      .map((segment) => ({ segment, depth: hierarchyLevel(segment, segmentById) }))
+      .filter(({ segment, depth }) => segment.roadId === focusedRoadId && depth <= level)
+      .sort((left, right) => left.depth - right.depth || left.segment.id.localeCompare(right.segment.id))
+      .map(({ segment, depth }) => {
         const points = segment.memberNodeIds.flatMap((id) => {
           const placement = placementById.get(id);
           if (!placement) return [];
@@ -163,16 +172,20 @@ export class PortraitMapProjectionService {
             request.camera,
           )];
         });
+        // A segment with no placed members (e.g. freshly created and empty)
+        // has no frame to draw.
+        if (points.length === 0) return [];
         const xs = points.map((point) => point.x);
         const ys = points.map((point) => point.y);
         const padding = 20;
-        return {
+        return [{
           id: segment.id,
           roadId: segment.roadId,
           title: segment.title,
           description: segment.description,
           tone: segment.tone,
-          hierarchyLevel: level,
+          hierarchyLevel: depth,
+          dimmed: depth < level,
           memberCount: segment.memberNodeIds.length,
           bounds: {
             x: Math.min(...xs) - padding,
@@ -180,8 +193,9 @@ export class PortraitMapProjectionService {
             width: Math.max(40, Math.max(...xs) - Math.min(...xs) + padding * 2),
             height: Math.max(40, Math.max(...ys) - Math.min(...ys) + padding * 2),
           },
-        };
-      });
+        }];
+      })
+      .flat();
 
     const recordPlacementById = new Map(request.layout.recordPlacements.map((placement) => [placement.recordId, placement]));
     const recordAttachments = level === 4 ? request.snapshot.records.flatMap((record) => {
@@ -297,7 +311,7 @@ export class PortraitMapProjectionService {
       }
       components.push(component.sort());
     }
-    return components.flatMap((component) => {
+    const descriptors = components.flatMap((component) => {
       const componentIds = new Set(component);
       const incomingBoundaries = rootConnections
         .filter((connection) => componentIds.has(connection.toNodeId) && visibleIds.has(connection.fromNodeId))
@@ -314,10 +328,22 @@ export class PortraitMapProjectionService {
       const from = projectedNodeById.get(fromNodeId);
       const to = projectedNodeById.get(toNodeId);
       if (!fromNodeId || !toNodeId || !from || !to) return [];
-      const covered = rootConnections
-        .filter((connection) =>
-          componentIds.has(connection.fromNodeId) || componentIds.has(connection.toNodeId),
-        )
+      const covered = rootConnections.filter((connection) =>
+        componentIds.has(connection.fromNodeId) || componentIds.has(connection.toNodeId),
+      );
+      return [{ fromNodeId, toNodeId, from, to, component, covered }];
+    });
+    // Parallel hidden branches between the same visible endpoints merge into one
+    // summary road, matching the prototype (one corridor per boundary pair).
+    const groups = new Map<string, typeof descriptors>();
+    for (const descriptor of descriptors) {
+      const key = `${descriptor.fromNodeId}→${descriptor.toNodeId}`;
+      groups.set(key, [...(groups.get(key) ?? []), descriptor]);
+    }
+    return [...groups.values()].map((group) => {
+      const first = group[0];
+      const hiddenNodeIds = group.flatMap((descriptor) => descriptor.component).sort();
+      const covered = [...new Map(group.flatMap((descriptor) => descriptor.covered).map((connection) => [connection.id, connection])).values()]
         .sort((left, right) =>
           (placementById.get(left.toNodeId)?.depthRank ?? 0) - (placementById.get(right.toNodeId)?.depthRank ?? 0)
           || left.id.localeCompare(right.id),
@@ -330,28 +356,28 @@ export class PortraitMapProjectionService {
         : sections.some((section) => section.outcome === 'todo') ? 'todo' : 'success';
       const projected = this.projectConnection(
         {
-          id: `summary:${road.id}:${fromNodeId}:${toNodeId}`,
-          fromNodeId,
-          toNodeId,
+          id: `summary:${road.id}:${first.fromNodeId}:${first.toNodeId}`,
+          fromNodeId: first.fromNodeId,
+          toNodeId: first.toNodeId,
           meaning: `summarizes ${road.title}`,
         },
         outcome,
-        from,
-        to,
+        first.from,
+        first.to,
         request,
         sections.every((section) => !filters.has(section.outcome)),
         covered.some((connection) => request.activeRoute?.connectionIds.includes(connection.id)),
       );
-      return [{
+      return {
         ...projected,
         kind: 'summary' as const,
         roadId: road.id,
         segmentId: road.rootSegmentId,
-        hiddenNodeIds: component,
+        hiddenNodeIds,
         hiddenConnectionIds: covered.map((connection) => connection.id),
-        hiddenCount: component.length,
+        hiddenCount: hiddenNodeIds.length,
         sections,
-      }];
+      };
     });
   }
 }

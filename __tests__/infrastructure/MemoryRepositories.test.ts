@@ -1,6 +1,6 @@
 import { MemoryLifeMapRepository } from '../../src/infrastructure/memory/MemoryLifeMapRepository';
 import { MemoryMapLayoutRepository } from '../../src/infrastructure/memory/MemoryMapLayoutRepository';
-import { createPortraitRoadMapLayout, createPortraitRoadMapSnapshot } from '../../src/infrastructure/memory/portraitRoadMapFixture';
+import { createPortraitRoadMapLayout, createPortraitRoadMapSnapshot } from '../fixtures/portraitRoadMapFixture';
 
 describe('memory repositories', () => {
   it('enforces optimistic versions and returns defensive copies', async () => {

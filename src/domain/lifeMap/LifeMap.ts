@@ -3,10 +3,12 @@ import {
   LifeMapSnapshot,
   PlannedNode,
   RecordEntry,
+  RoadSegment,
   activeNodes,
   cloneSnapshot,
 } from './entities';
 import { LifeMapError, invariant } from './LifeMapErrors';
+import { MAX_SEGMENT_DEPTH, segmentDepth, segmentSubtreeHeight } from './segmentTree';
 
 export interface NewPlannedNode extends PlannedNode {}
 
@@ -88,9 +90,12 @@ export class LifeMap {
 
     const nodes = new Map(snapshot.nodes.map((node) => [node.id, node]));
     const active = activeNodes(snapshot);
-    const origins = active.filter((node) => node.kind === 'originStatus');
+    const origins = active.filter((node) => node.permanent);
     invariant(origins.length === 1, 'invalid-origin', 'A Life Map requires exactly one active origin', {
       count: origins.length,
+    });
+    invariant(origins[0].kind === 'status', 'invalid-origin', 'The permanent origin must be a status node', {
+      originId: origins[0].id,
     });
     invariant(
       !snapshot.connections.some((connection) => connection.toNodeId === origins[0].id),
@@ -119,6 +124,24 @@ export class LifeMap {
         const parent = segments.get(segment.parentSegmentId);
         invariant(parent, 'missing-reference', `Segment ${segment.id} has a missing parent`, { segmentId: segment.id });
         invariant(parent.roadId === segment.roadId, 'invalid-segment', 'Child segments must remain inside one road');
+        // Containment invariant: a layer is carved out of its parent's pool,
+        // so "deepest containing segment" is unambiguous for every member.
+        for (const nodeId of segment.memberNodeIds) {
+          invariant(
+            parent.memberNodeIds.includes(nodeId),
+            'invalid-segment',
+            `Segment ${segment.id} lists node ${nodeId} outside its parent's pool`,
+            { segmentId: segment.id, parentSegmentId: parent.id },
+          );
+        }
+        for (const connectionId of segment.connectionIds) {
+          invariant(
+            parent.connectionIds.includes(connectionId),
+            'invalid-segment',
+            `Segment ${segment.id} lists connection ${connectionId} outside its parent's pool`,
+            { segmentId: segment.id, parentSegmentId: parent.id },
+          );
+        }
       }
       for (const nodeId of segment.memberNodeIds) {
         invariant(nodes.has(nodeId), 'missing-reference', `Segment ${segment.id} references missing node ${nodeId}`);
@@ -163,12 +186,21 @@ export class LifeMap {
 
   createNode(node: NewPlannedNode, segmentId?: string): LifeMap {
     return this.evolve((draft) => {
-      invariant(node.kind !== 'originStatus', 'invalid-operation', 'The permanent origin cannot be created again');
+      invariant(!node.permanent, 'invalid-operation', 'The permanent origin cannot be created again');
       draft.nodes.push({ ...node });
       if (segmentId) {
         const segment = draft.segments.find((candidate) => candidate.id === segmentId);
         invariant(segment, 'missing-reference', `Segment ${segmentId} does not exist`);
-        segment.memberNodeIds.push(node.id);
+        // Containment: filing into a segment files into every ancestor too.
+        let current: RoadSegment | undefined = segment;
+        const visited = new Set<string>();
+        while (current && !visited.has(current.id)) {
+          visited.add(current.id);
+          if (!current.memberNodeIds.includes(node.id)) current.memberNodeIds.push(node.id);
+          current = current.parentSegmentId
+            ? draft.segments.find((candidate) => candidate.id === current!.parentSegmentId)
+            : undefined;
+        }
       }
     });
   }
@@ -177,8 +209,7 @@ export class LifeMap {
     return this.evolve((draft) => {
       const node = draft.nodes.find((candidate) => candidate.id === nodeId && !candidate.archivedAt);
       invariant(node, 'missing-reference', `Node ${nodeId} does not exist`);
-      invariant(node.kind !== 'originStatus' || changes.kind === 'originStatus', 'invalid-operation', 'The origin kind is permanent');
-      invariant(changes.kind !== 'originStatus' || node.kind === 'originStatus', 'invalid-operation', 'No other node can become the origin');
+      invariant(!node.permanent || changes.kind === 'status', 'invalid-operation', 'The permanent origin must remain a status node');
       node.title = changes.title.trim();
       node.description = changes.description.trim();
       node.kind = changes.kind;
@@ -201,7 +232,7 @@ export class LifeMap {
     return this.evolve((draft) => {
       const index = draft.connections.findIndex((connection) => connection.id === input.connectionId);
       invariant(index >= 0, 'missing-reference', `Connection ${input.connectionId} does not exist`);
-      invariant(input.node.kind !== 'originStatus', 'invalid-operation', 'A split node cannot be another origin');
+      invariant(!input.node.permanent, 'invalid-operation', 'A split node cannot be another origin');
       const replaced = draft.connections[index];
       const incoming: Connection = {
         id: input.incomingConnectionId,
@@ -241,7 +272,7 @@ export class LifeMap {
     return this.evolve((draft) => {
       const node = draft.nodes.find((candidate) => candidate.id === nodeId && !candidate.archivedAt);
       invariant(node, 'missing-reference', `Node ${nodeId} does not exist`);
-      invariant(node.kind !== 'originStatus', 'invalid-operation', 'The permanent origin cannot be removed');
+      invariant(!node.permanent, 'invalid-operation', 'The permanent origin cannot be removed');
       invariant(!draft.roads.some((road) => road.destinationGoalId === nodeId), 'invalid-operation', 'A Road destination cannot be removed');
       const isReferenced = draft.records.some((record) => record.targetId === nodeId);
       if (isReferenced) {
@@ -265,5 +296,154 @@ export class LifeMap {
 
   captureRecord(record: RecordEntry): LifeMap {
     return this.evolve((draft) => draft.records.push({ ...record }));
+  }
+
+  createSegment(segment: RoadSegment): LifeMap {
+    return this.evolve((draft) => {
+      invariant(
+        !segment.roadId || segment.parentSegmentId,
+        'invalid-segment',
+        'A road segment must have a parent segment',
+        { segmentId: segment.id },
+      );
+      if (segment.parentSegmentId) {
+        const parent = draft.segments.find((candidate) => candidate.id === segment.parentSegmentId);
+        invariant(parent, 'missing-reference', `Segment ${segment.parentSegmentId} does not exist`, {
+          segmentId: segment.parentSegmentId,
+        });
+        invariant(
+          segmentDepth(draft.segments, parent.id) + 1 <= MAX_SEGMENT_DEPTH,
+          'invalid-segment',
+          'Segment hierarchy is limited to five levels',
+          { segmentId: segment.id, parentSegmentId: parent.id },
+        );
+      }
+      draft.segments.push({
+        ...segment,
+        memberNodeIds: [...segment.memberNodeIds],
+        connectionIds: [...segment.connectionIds],
+      });
+    });
+  }
+
+  reparentSegment(segmentId: string, newParentSegmentId: string): LifeMap {
+    return this.evolve((draft) => {
+      const segment = draft.segments.find((candidate) => candidate.id === segmentId);
+      invariant(segment, 'missing-reference', `Segment ${segmentId} does not exist`, { segmentId });
+      const parent = draft.segments.find((candidate) => candidate.id === newParentSegmentId);
+      invariant(parent, 'missing-reference', `Segment ${newParentSegmentId} does not exist`, { segmentId: newParentSegmentId });
+      invariant(segmentId !== newParentSegmentId, 'invalid-operation', 'A segment cannot be nested inside itself', { segmentId });
+      invariant(
+        !draft.roads.some((road) => road.rootSegmentId === segmentId),
+        'invalid-operation',
+        'A road root segment cannot be reparented',
+        { segmentId },
+      );
+      invariant(parent.roadId === segment.roadId, 'invalid-segment', 'Child segments must remain inside one road');
+      let cursor: RoadSegment | undefined = parent;
+      while (cursor) {
+        invariant(
+          cursor.id !== segmentId,
+          'invalid-operation',
+          'A segment cannot be nested inside its own subtree',
+          { segmentId, parentSegmentId: newParentSegmentId },
+        );
+        cursor = cursor.parentSegmentId
+          ? draft.segments.find((candidate) => candidate.id === cursor!.parentSegmentId)
+          : undefined;
+      }
+      invariant(
+        segmentDepth(draft.segments, newParentSegmentId) + 1 + segmentSubtreeHeight(draft.segments, segmentId) <= MAX_SEGMENT_DEPTH,
+        'invalid-segment',
+        'Segment hierarchy is limited to five levels',
+        { segmentId, parentSegmentId: newParentSegmentId },
+      );
+      segment.parentSegmentId = newParentSegmentId;
+    });
+  }
+
+  dissolveSegment(segmentId: string): LifeMap {
+    return this.evolve((draft) => {
+      const segment = draft.segments.find((candidate) => candidate.id === segmentId);
+      invariant(segment, 'missing-reference', `Segment ${segmentId} does not exist`, { segmentId });
+      invariant(
+        !draft.roads.some((road) => road.rootSegmentId === segmentId),
+        'invalid-operation',
+        'A road root segment cannot be dissolved',
+        { segmentId },
+      );
+      const parent = segment.parentSegmentId
+        ? draft.segments.find((candidate) => candidate.id === segment.parentSegmentId)
+        : undefined;
+      const children = draft.segments.filter((candidate) => candidate.parentSegmentId === segmentId);
+      if (parent) {
+        // The parent already covers these pools under the containment
+        // invariant; merging keeps that true even for legacy snapshots.
+        parent.memberNodeIds = [...new Set([...parent.memberNodeIds, ...segment.memberNodeIds])];
+        parent.connectionIds = [...new Set([...parent.connectionIds, ...segment.connectionIds])];
+        for (const child of children) child.parentSegmentId = parent.id;
+      } else {
+        // No parent to inherit the pools: members are simply released and
+        // children become standalone roots, leaving any road behind.
+        const release = (id: string): void => {
+          const current = draft.segments.find((candidate) => candidate.id === id);
+          if (!current) return;
+          current.roadId = undefined;
+          for (const child of draft.segments.filter((candidate) => candidate.parentSegmentId === id)) release(child.id);
+        };
+        for (const child of children) {
+          child.parentSegmentId = undefined;
+          release(child.id);
+        }
+      }
+      draft.segments = draft.segments.filter((candidate) => candidate.id !== segmentId);
+    });
+  }
+
+  moveNodeToSegment(nodeId: string, targetSegmentId: string): LifeMap {
+    return this.evolve((draft) => {
+      const node = draft.nodes.find((candidate) => candidate.id === nodeId && !candidate.archivedAt);
+      invariant(node, 'missing-reference', `Node ${nodeId} does not exist`, { nodeId });
+      const target = draft.segments.find((candidate) => candidate.id === targetSegmentId);
+      invariant(target, 'missing-reference', `Segment ${targetSegmentId} does not exist`, { segmentId: targetSegmentId });
+      const memberRoads = new Set(
+        draft.segments
+          .filter((segment) => segment.roadId && segment.memberNodeIds.includes(nodeId))
+          .map((segment) => segment.roadId!),
+      );
+      invariant(
+        !target.roadId || memberRoads.size === 0 || memberRoads.has(target.roadId),
+        'invalid-segment',
+        'A node cannot move across roads',
+        { nodeId, segmentId: targetSegmentId },
+      );
+      // The move is scoped to the target's tree: the node joins the target and
+      // its ancestors (containment) and leaves every other segment of that
+      // tree, so its deepest container — its layer — becomes exactly the target.
+      const scope = target.roadId
+        ? draft.segments.filter((segment) => segment.roadId === target.roadId)
+        : [target];
+      const kept = new Set<string>();
+      let cursor: RoadSegment | undefined = target;
+      while (cursor) {
+        kept.add(cursor.id);
+        cursor = cursor.parentSegmentId
+          ? draft.segments.find((candidate) => candidate.id === cursor!.parentSegmentId)
+          : undefined;
+      }
+      const connectionById = new Map(draft.connections.map((connection) => [connection.id, connection]));
+      for (const segment of scope) {
+        if (kept.has(segment.id)) {
+          if (!segment.memberNodeIds.includes(nodeId)) segment.memberNodeIds.push(nodeId);
+        } else if (segment.memberNodeIds.includes(nodeId)) {
+          segment.memberNodeIds = segment.memberNodeIds.filter((id) => id !== nodeId);
+          // A listed connection is only covered while both endpoints stay members.
+          segment.connectionIds = segment.connectionIds.filter((id) => {
+            const connection = connectionById.get(id);
+            return !!connection && segment.memberNodeIds.includes(connection.fromNodeId) && segment.memberNodeIds.includes(connection.toNodeId);
+          });
+        }
+      }
+    });
   }
 }

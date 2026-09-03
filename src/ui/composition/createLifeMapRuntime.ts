@@ -1,11 +1,12 @@
 import { CaptureRecord } from '../../application/lifeMap/CaptureRecord';
 import { EditLifeMap } from '../../application/lifeMap/EditLifeMap';
 import { LoadLifeMap, LoadProjectionRequest } from '../../application/lifeMap/LoadLifeMap';
-import { FindRoadResult, FindRoadService } from '../../application/map/FindRoadService';
-import { PlannedKind, PlannedNode } from '../../domain/lifeMap/entities';
+import { FindRoadResult, FindRoadService, RoadPreview } from '../../application/map/FindRoadService';
+import { LifeMapSnapshot, MapLayoutSnapshot, PlannedKind, PlannedNode } from '../../domain/lifeMap/entities';
+import { segmentDepth } from '../../domain/lifeMap/segmentTree';
 import { MemoryLifeMapRepository } from '../../infrastructure/memory/MemoryLifeMapRepository';
 import { MemoryMapLayoutRepository } from '../../infrastructure/memory/MemoryMapLayoutRepository';
-import { createPortraitRoadMapLayout, createPortraitRoadMapSnapshot } from '../../infrastructure/memory/portraitRoadMapFixture';
+import { createPortraitLifeMapLayout, createPortraitLifeMapSnapshot } from '../../infrastructure/memory/portraitLifeMapSeed';
 
 export interface RuntimeNodeOption {
   id: string;
@@ -15,17 +16,40 @@ export interface RuntimeNodeOption {
   outcome: PlannedNode['outcome'];
 }
 
+/** A segment of the focused road, with its depth (= the layer it curates). */
+export interface RuntimeSegmentOption {
+  id: string;
+  title: string;
+  depth: number;
+}
+
 export class LifeMapRuntime {
-  private readonly lifeMaps = new MemoryLifeMapRepository(createPortraitRoadMapSnapshot());
-  private readonly layouts = new MemoryMapLayoutRepository(createPortraitRoadMapLayout());
-  private readonly loadLifeMap = new LoadLifeMap(this.lifeMaps, this.layouts);
-  private readonly editLifeMap = new EditLifeMap(this.lifeMaps, this.layouts);
-  private readonly captureRecord = new CaptureRecord(this.lifeMaps, this.layouts);
+  private readonly lifeMaps: MemoryLifeMapRepository;
+  private readonly layouts: MemoryMapLayoutRepository;
+  private readonly loadLifeMap: LoadLifeMap;
+  private readonly editLifeMap: EditLifeMap;
+  private readonly captureRecord: CaptureRecord;
   private readonly findRoadService = new FindRoadService();
   private sequence = 0;
 
+  constructor(
+    snapshot: LifeMapSnapshot = createPortraitLifeMapSnapshot(),
+    layout: MapLayoutSnapshot = createPortraitLifeMapLayout(),
+  ) {
+    this.lifeMaps = new MemoryLifeMapRepository(snapshot);
+    this.layouts = new MemoryMapLayoutRepository(layout);
+    this.loadLifeMap = new LoadLifeMap(this.lifeMaps, this.layouts);
+    this.editLifeMap = new EditLifeMap(this.lifeMaps, this.layouts);
+    this.captureRecord = new CaptureRecord(this.lifeMaps, this.layouts);
+  }
+
   load(request: LoadProjectionRequest) {
     return this.loadLifeMap.execute(request);
+  }
+
+  /** Camera/focus/filter changes re-project from cached data — no repository round trip. */
+  reproject(request: LoadProjectionRequest) {
+    return this.loadLifeMap.reproject(request);
   }
 
   async options(): Promise<RuntimeNodeOption[]> {
@@ -40,6 +64,11 @@ export class LifeMapRuntime {
   async findRoad(fromNodeId: string, toNodeId: string): Promise<FindRoadResult> {
     const [snapshot, layout] = await Promise.all([this.lifeMaps.load(), this.layouts.load()]);
     return this.findRoadService.find(snapshot, layout, fromNodeId, toNodeId);
+  }
+
+  async routePreviews(fromNodeId: string): Promise<RoadPreview[]> {
+    const snapshot = await this.lifeMaps.load();
+    return this.findRoadService.previewAll(snapshot, fromNodeId);
   }
 
   changeOutcome(nodeId: string, outcome: PlannedNode['outcome']) {
@@ -73,7 +102,7 @@ export class LifeMapRuntime {
 
   createNode(input: {
     title: string;
-    kind: Exclude<PlannedKind, 'originStatus'>;
+    kind: PlannedKind;
     outcome: PlannedNode['outcome'];
     worldX: number;
     depthRank: number;
@@ -95,7 +124,7 @@ export class LifeMapRuntime {
     });
   }
 
-  async insertNode(connectionId: string, details?: { title: string; kind: Exclude<PlannedKind, 'originStatus'>; outcome: PlannedNode['outcome'] }): Promise<void> {
+  async insertNode(connectionId: string, details?: { title: string; kind: PlannedKind; outcome: PlannedNode['outcome'] }): Promise<void> {
     const [snapshot, layout] = await Promise.all([this.lifeMaps.load(), this.layouts.load()]);
     const connection = snapshot.connections.find((candidate) => candidate.id === connectionId);
     if (!connection) throw new Error('Connection no longer exists');
@@ -118,6 +147,50 @@ export class LifeMapRuntime {
     return this.editLifeMap.removeConnection(connectionId);
   }
 
+  /** The focused (featured) road's segments, shallowest first — the layers a node can be filed into. */
+  async segmentOptions(): Promise<RuntimeSegmentOption[]> {
+    const snapshot = await this.lifeMaps.load();
+    const focusedRoadId = snapshot.roads.find((road) => road.featured)?.id ?? snapshot.roads[0]?.id;
+    return snapshot.segments
+      .filter((segment) => segment.roadId === focusedRoadId)
+      .map((segment) => ({ id: segment.id, title: segment.title, depth: segmentDepth(snapshot.segments, segment.id) }))
+      .sort((left, right) => left.depth - right.depth || left.id.localeCompare(right.id));
+  }
+
+  moveNodeToSegment(nodeId: string, targetSegmentId: string) {
+    return this.editLifeMap.moveNodeToSegment(nodeId, targetSegmentId);
+  }
+
+  async createSubSegmentForConnection(connectionId: string): Promise<string> {
+    const snapshot = await this.lifeMaps.load();
+    const connection = snapshot.connections.find((candidate) => candidate.id === connectionId);
+    if (!connection) throw new Error('Connection no longer exists');
+    const titleOf = (nodeId: string) => snapshot.nodes.find((node) => node.id === nodeId)?.title ?? nodeId;
+    const id = this.id('segment');
+    await this.editLifeMap.createSubSegmentForConnection({
+      id,
+      connectionId,
+      title: `${titleOf(connection.fromNodeId)} → ${titleOf(connection.toNodeId)}`,
+    });
+    return id;
+  }
+
+  /**
+   * Extracts a connection into its own deeper segment and returns that
+   * segment's id. A connection already filed as a segment's sole connection
+   * reuses that segment instead of nesting a redundant one.
+   */
+  async extractConnection(connectionId: string): Promise<string> {
+    const snapshot = await this.lifeMaps.load();
+    const connection = snapshot.connections.find((candidate) => candidate.id === connectionId);
+    if (!connection) throw new Error('Connection no longer exists');
+    const existing = snapshot.segments.find((segment) =>
+      segment.connectionIds.length === 1 && segment.connectionIds[0] === connection.id
+      && segment.memberNodeIds.includes(connection.fromNodeId) && segment.memberNodeIds.includes(connection.toNodeId));
+    if (existing) return existing.id;
+    return this.createSubSegmentForConnection(connectionId);
+  }
+
   resetLayout() {
     return this.editLifeMap.resetLayout();
   }
@@ -138,4 +211,5 @@ export class LifeMapRuntime {
   }
 }
 
-export const createLifeMapRuntime = (): LifeMapRuntime => new LifeMapRuntime();
+export const createLifeMapRuntime = (snapshot?: LifeMapSnapshot, layout?: MapLayoutSnapshot): LifeMapRuntime =>
+  new LifeMapRuntime(snapshot, layout);

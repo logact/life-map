@@ -66,4 +66,4 @@ export const focusCameraAboveSheet = (
   centerY: worldPoint.y + sheetHeight / (2 * camera.scale),
 }, viewport);
 
-export const resetCamera = (): MapCamera => ({ centerX: ROAD_WORLD_WIDTH / 2, centerY: ROAD_WORLD_HEIGHT / 2, scale: 1 });
+export const resetCamera = (): MapCamera => ({ centerX: ROAD_WORLD_WIDTH / 2, centerY: ROAD_WORLD_HEIGHT / 2, scale: 0.7 });

@@ -7,10 +7,9 @@ import { arrowheadPath, quadraticPath } from './mapGeometry';
 import { mapTheme, outcomeColor } from './mapTheme';
 
 export const MARKER_RADIUS: Record<string, number> = {
-  originStatus: 19,
+  status: 21,
   goal: 22,
   task: 19,
-  checkpoint: 21,
 };
 
 /** Red blocked badge (circle + white X) at a failed road's curve midpoint. */

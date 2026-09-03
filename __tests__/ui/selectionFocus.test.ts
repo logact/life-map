@@ -12,10 +12,7 @@ const projection: PortraitMapProjection = {
     filtered: false, onActiveRoute: false,
   }],
   summaryConnections: [],
-  segmentOverlays: [{
-    id: 's1', title: 'Segment', description: '', hierarchyLevel: 0, memberCount: 3,
-    bounds: { x: 10, y: 20, width: 100, height: 60 },
-  }],
+  segmentOverlays: [],
   recordAttachments: [{
     id: 'r1', targetId: 'n1', summary: 'Note', occurredAt: '2026-01-01',
     from: { x: 30, y: 40 }, to: { x: 100, y: 200 }, filtered: false,
@@ -25,10 +22,9 @@ const projection: PortraitMapProjection = {
 };
 
 describe('selectionFocusPoint', () => {
-  it('anchors nodes, connections, segments, and records for above-sheet focus', () => {
+  it('anchors nodes, connections, and records for above-sheet focus', () => {
     expect(selectionFocusPoint({ type: 'node', id: 'n1' }, projection)).toEqual({ x: 100, y: 200 });
     expect(selectionFocusPoint({ type: 'connection', id: 'c1' }, projection)).toEqual({ x: 50, y: 50 });
-    expect(selectionFocusPoint({ type: 'segment', id: 's1' }, projection)).toEqual({ x: 60, y: 50 });
     expect(selectionFocusPoint({ type: 'record', id: 'r1' }, projection)).toEqual({ x: 30, y: 40 });
   });
 

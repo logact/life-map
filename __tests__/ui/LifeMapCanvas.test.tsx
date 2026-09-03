@@ -49,6 +49,7 @@ const renderCanvas = (overrides: Partial<Parameters<typeof LifeMapCanvas>[0]> = 
     onBendDrop: jest.fn(),
     onLongPress: jest.fn(),
     onEdgeLongPress: jest.fn(),
+    onTap: jest.fn(),
     ...overrides,
   };
   const screen = render(<LifeMapCanvas {...props} />);
@@ -92,8 +93,26 @@ describe('LifeMapCanvas visual states', () => {
   });
 });
 
-describe('LifeMapCanvas edit feedback', () => {
-  it('shows a hold ring at the press point in edit mode only', () => {
+describe('LifeMapCanvas gesture wiring', () => {
+  it('attaches pan/zoom responders to a wrapper view, not the pressable', () => {
+    const { screen } = renderCanvas({ gestureHandlers: { onMoveShouldSetResponder: () => true } });
+    const pressable = screen.getByLabelText('Life Map canvas');
+    // Pressability overrides responder handlers on the Pressable itself, so the
+    // pan responder must live on an ancestor host view to ever fire.
+    expect(pressable.props.onMoveShouldSetResponder).toBeUndefined();
+    let node = pressable.parent;
+    while (node && typeof node.props.onMoveShouldSetResponder !== 'function') node = node.parent;
+    expect(node).not.toBeNull();
+  });
+
+  it('forwards taps for double-tap zoom detection', () => {
+    const { screen, props } = renderCanvas();
+    fireEvent(screen.getByLabelText('Life Map canvas'), 'press', { nativeEvent: { locationX: 90, locationY: 120 } });
+    expect(props.onTap).toHaveBeenCalledWith(90, 120);
+  });
+});
+
+describe('LifeMapCanvas edit feedback', () => {  it('shows a hold ring at the press point in edit mode only', () => {
     const { screen } = renderCanvas({ mode: 'edit' });
     const canvas = screen.getByLabelText('Life Map canvas');
     fireEvent(canvas, 'pressIn', { nativeEvent: { locationX: 60, locationY: 80 } });

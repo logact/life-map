@@ -17,12 +17,6 @@ export const selectionFocusPoint = (selection: Selection, projection: PortraitMa
       : projection.summaryConnections.find((candidate) => candidate.id === selection.id);
     return connection ? quadraticPointAt(connection.from, connection.control, connection.to, 0.5) : undefined;
   }
-  if (selection.type === 'segment') {
-    const segment = projection.segmentOverlays.find((candidate) => candidate.id === selection.id);
-    return segment
-      ? { x: segment.bounds.x + segment.bounds.width / 2, y: segment.bounds.y + segment.bounds.height / 2 }
-      : undefined;
-  }
   const record = projection.recordAttachments.find((candidate) => candidate.id === selection.id);
   return record ? record.from : undefined;
 };

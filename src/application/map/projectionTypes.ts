@@ -29,6 +29,7 @@ export interface ProjectedNode extends ScreenPoint {
   description: string;
   kind: PlannedKind;
   outcome: Outcome;
+  permanent?: boolean;
   worldX: number;
   worldY: number;
   depthRank: number;
@@ -72,6 +73,8 @@ export interface ProjectedSegmentOverlay {
   description: string;
   tone?: 'foundation' | 'distance' | 'readiness';
   hierarchyLevel: number;
+  /** Ancestor layer kept as context while viewing a deeper level — rendered faint, not tappable. */
+  dimmed?: boolean;
   memberCount: number;
   bounds: { x: number; y: number; width: number; height: number };
 }

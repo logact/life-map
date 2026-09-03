@@ -1,8 +1,8 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Animated, PanResponder, Pressable, StyleProp, StyleSheet, Text, View, ViewStyle } from 'react-native';
-import Svg, { Path, Rect, Text as SvgText } from 'react-native-svg';
+import Svg, { Path, Text as SvgText } from 'react-native-svg';
 import { PortraitMapProjection, ProjectedNode, ScreenPoint } from '../../application/map/projectionTypes';
-import { Outcome, PlannedKind } from '../../domain/lifeMap/entities';
+import { Outcome } from '../../domain/lifeMap/entities';
 import { BlockerBadge, FlowPath, HoldRing, MARKER_RADIUS, RoadArrowhead, SelectionRing, SparkPath } from './canvasDecorations';
 import { closestConnectionId, quadraticPath, quadraticPointAt, quadraticSubpath } from './mapGeometry';
 import { mapTheme, outcomeColor } from './mapTheme';
@@ -35,17 +35,22 @@ interface LifeMapCanvasProps {
   onBendDrop: (connectionId: string, x: number, y: number) => void;
   onLongPress: (x: number, y: number) => void;
   onEdgeLongPress: (connectionId: string) => void;
+  onTap: (x: number, y: number) => void;
 }
 
 const stateDash = (outcome: Outcome): number[] | undefined =>
   outcome === 'todo' ? [8, 6] : outcome === 'failed' ? [3, 7] : undefined;
 
-const markerGlyph = (kind: PlannedKind): string => {
-  if (kind === 'originStatus') return '●';
-  if (kind === 'goal') return '⚑';
-  if (kind === 'checkpoint') return '◇';
+const markerGlyph = (node: Pick<ProjectedNode, 'kind' | 'permanent'>): string => {
+  if (node.permanent) return '●';
+  if (node.kind === 'goal') return '⚑';
+  if (node.kind === 'status') return '◇';
   return '›';
 };
+
+/** The permanent origin keeps the smaller disc; other status nodes keep the wide pill. */
+const markerRadius = (node: Pick<ProjectedNode, 'kind' | 'permanent'>): number =>
+  node.permanent ? 19 : MARKER_RADIUS[node.kind] ?? 19;
 
 const midpointControl = (from: ScreenPoint, to: ScreenPoint): ScreenPoint => ({
   x: (from.x + to.x) / 2 + (to.x - from.x) * 0.08,
@@ -90,7 +95,7 @@ const DraggableMarker = ({ node, mode, selected, dimmed, pathTarget, routeActive
     },
   }), [mode, node.x, node.y, onMove, onSelect]);
   const opacity = node.filtered ? 0.14 : routeActive && !node.onActiveRoute ? 0.18 : dimmed ? 0.35 : 1;
-  const label = `${node.kind === 'checkpoint' ? 'Status checkpoint' : node.kind}, ${node.title}, ${node.outcome}`;
+  const label = `${node.kind === 'status' ? 'Status' : node.kind}, ${node.title}, ${node.outcome}`;
   const style: StyleProp<ViewStyle> = [
     styles.nodeHit,
     { left: node.x - 24, top: node.y - 24, opacity, transform: [{ translateX: offset.x }, { translateY: offset.y }] },
@@ -98,17 +103,17 @@ const DraggableMarker = ({ node, mode, selected, dimmed, pathTarget, routeActive
   const content = (
     <Animated.View style={[styles.markerMount, { opacity: mount }]}>
       <View style={styles.markerWrap}>
-        {selected && <SelectionRing radius={MARKER_RADIUS[node.kind] ?? 19} reducedMotion={reducedMotion} />}
-        {pathTarget && <SelectionRing radius={MARKER_RADIUS[node.kind] ?? 19} reducedMotion color={mapTheme.forest} testID="path-target-ring" />}
+        {selected && <SelectionRing radius={markerRadius(node)} reducedMotion={reducedMotion} />}
+        {pathTarget && <SelectionRing radius={markerRadius(node)} reducedMotion color={mapTheme.forest} testID="path-target-ring" />}
         <View style={[
           styles.marker,
           node.kind === 'goal' && styles.goalMarker,
           node.kind === 'task' && styles.taskMarker,
-          node.kind === 'checkpoint' && styles.checkpointMarker,
+          node.kind === 'status' && !node.permanent && styles.statusMarker,
           { borderColor: outcomeColor[node.outcome], backgroundColor: node.outcome === 'success' ? mapTheme.sagePale : node.outcome === 'failed' ? mapTheme.failedPale : mapTheme.paperStrong },
           selected && styles.selectedMarker,
         ]}>
-          <Text style={[styles.markerGlyph, { color: outcomeColor[node.outcome] }]}>{markerGlyph(node.kind)}</Text>
+          <Text style={[styles.markerGlyph, { color: outcomeColor[node.outcome] }]}>{markerGlyph(node)}</Text>
         </View>
       </View>
       {node.showLabel && (
@@ -269,6 +274,7 @@ export const LifeMapCanvas = ({
   onBendDrop,
   onLongPress,
   onEdgeLongPress,
+  onTap,
 }: LifeMapCanvasProps) => {
   const [holdPoint, setHoldPoint] = useState<ScreenPoint | undefined>();
 
@@ -281,9 +287,9 @@ export const LifeMapCanvas = ({
     const direction = { x: rawEnd.x - source.x, y: rawEnd.y - source.y };
     const length = Math.hypot(direction.x, direction.y) || 1;
     const unit = { x: direction.x / length, y: direction.y / length };
-    const from = { x: source.x + unit.x * (MARKER_RADIUS[source.kind] ?? 19), y: source.y + unit.y * (MARKER_RADIUS[source.kind] ?? 19) };
+    const from = { x: source.x + unit.x * markerRadius(source), y: source.y + unit.y * markerRadius(source) };
     const to = target
-      ? { x: target.x - unit.x * (MARKER_RADIUS[target.kind] ?? 19), y: target.y - unit.y * (MARKER_RADIUS[target.kind] ?? 19) }
+      ? { x: target.x - unit.x * markerRadius(target), y: target.y - unit.y * markerRadius(target) }
       : rawEnd;
     return { from, control: midpointControl(from, to), to };
   }, [projection, draftPath]);
@@ -308,41 +314,27 @@ export const LifeMapCanvas = ({
   }, [projection, composerPreview]);
 
   return (
-    <Pressable
-      accessibilityLabel="Life Map canvas"
-      delayLongPress={560}
-      onPressIn={(event) => {
-        if (mode === 'edit') setHoldPoint({ x: event.nativeEvent.locationX, y: event.nativeEvent.locationY });
-      }}
-      onPressOut={() => setHoldPoint(undefined)}
-      onLongPress={(event) => {
-        setHoldPoint(undefined);
-        if (mode !== 'edit') return;
-        const x = event.nativeEvent.locationX;
-        const y = event.nativeEvent.locationY;
-        const edgeId = closestConnectionId({ x, y }, projection.connections, 14);
-        if (edgeId) onEdgeLongPress(edgeId);
-        else onLongPress(x, y);
-      }}
-      style={[styles.canvas, { width, height }]}
-      {...gestureHandlers}
-    >
+    <View style={[styles.canvas, { width, height }]} {...gestureHandlers}>
+      <Pressable
+        accessibilityLabel="Life Map canvas"
+        delayLongPress={560}
+        onPress={(event) => onTap(event.nativeEvent.locationX, event.nativeEvent.locationY)}
+        onPressIn={(event) => {
+          if (mode === 'edit') setHoldPoint({ x: event.nativeEvent.locationX, y: event.nativeEvent.locationY });
+        }}
+        onPressOut={() => setHoldPoint(undefined)}
+        onLongPress={(event) => {
+          setHoldPoint(undefined);
+          if (mode !== 'edit') return;
+          const x = event.nativeEvent.locationX;
+          const y = event.nativeEvent.locationY;
+          const edgeId = closestConnectionId({ x, y }, projection.connections, 14);
+          if (edgeId) onEdgeLongPress(edgeId);
+          else onLongPress(x, y);
+        }}
+        style={styles.canvasPressable}
+      >
       <Svg width={width} height={height} style={StyleSheet.absoluteFill}>
-        {projection.segmentOverlays.map((overlay) => (
-          <Rect
-            key={overlay.id}
-            x={overlay.bounds.x}
-            y={overlay.bounds.y}
-            width={overlay.bounds.width}
-            height={overlay.bounds.height}
-            rx={24}
-            fill="none"
-            stroke={overlay.tone === 'distance' ? mapTheme.gold : overlay.tone === 'readiness' ? mapTheme.violet : mapTheme.sage}
-            strokeOpacity={routeActive ? 0.06 : selected?.type === 'segment' && selected.id === overlay.id ? 0.55 : 0.2}
-            strokeWidth={selected?.type === 'segment' && selected.id === overlay.id ? 10 : 7}
-            onPress={() => onSelect({ type: 'segment', id: overlay.id })}
-          />
-        ))}
         {projection.connections.map((connection) => {
           const muted = routeActive && !connection.onActiveRoute;
           const opacity = connection.filtered ? 0.1 : muted ? 0.11 : connection.onActiveRoute ? 1 : 0.78;
@@ -474,27 +466,6 @@ export const LifeMapCanvas = ({
           onMove={(x, y) => onMoveNode(node.id, x, y)}
         />
       ))}
-      {mode === 'edit' && selected?.type === 'node' && projection.nodes.filter((node) => node.id === selected.id && node.kind !== 'goal').map((node) => (
-        <DragHandle
-          key={`path-handle:${node.id}`}
-          x={node.x + 28}
-          y={node.y}
-          label={`Drag to connect from ${node.title}`}
-          color={mapTheme.gold}
-          onDrop={(x, y) => onPathHandleDrop(node.id, x, y)}
-          onDragMove={(point) => onPathHandleDrag(node.id, point)}
-        />
-      ))}
-      {mode === 'edit' && selected?.type === 'connection' && projection.connections.filter((connection) => connection.id === selected.id).map((connection) => (
-        <DragHandle
-          key={`bend-handle:${connection.id}`}
-          x={connection.control.x}
-          y={connection.control.y}
-          label="Drag to bend connection"
-          color={mapTheme.violet}
-          onDrop={(x, y) => onBendDrop(connection.id, x, y)}
-        />
-      ))}
       {projection.recordAttachments.map((record) => (
         <DraggableRecord
           key={record.id}
@@ -516,31 +487,59 @@ export const LifeMapCanvas = ({
             styles.marker,
             composerPreview.kind === 'goal' && styles.goalMarker,
             composerPreview.kind === 'task' && styles.taskMarker,
-            composerPreview.kind === 'checkpoint' && styles.checkpointMarker,
+            composerPreview.kind === 'status' && styles.statusMarker,
             styles.ghostMarker,
             { borderColor: outcomeColor[composerPreview.outcome] },
           ]}>
-            <Text style={[styles.markerGlyph, { color: outcomeColor[composerPreview.outcome] }]}>{markerGlyph(composerPreview.kind)}</Text>
+            <Text style={[styles.markerGlyph, { color: outcomeColor[composerPreview.outcome] }]}>{markerGlyph(composerPreview)}</Text>
           </View>
           <Text numberOfLines={1} style={styles.nodeLabel}>
-            {composerPreview.title.trim() || `New ${composerPreview.kind === 'checkpoint' ? 'checkpoint' : composerPreview.kind}`}
+            {composerPreview.title.trim() || `New ${composerPreview.kind}`}
           </Text>
         </View>
       )}
       {holdPoint && mode === 'edit' && <HoldRing testID="hold-ring" point={holdPoint} reducedMotion={reducedMotion} />}
-    </Pressable>
+      </Pressable>
+      {/* Drag handles sit outside the canvas Pressable: Pressability claims the
+          touch responder on press-in, which can swallow a child's pan gesture.
+          box-none lets touches pass through to the map everywhere else. */}
+      <View style={StyleSheet.absoluteFill} pointerEvents="box-none">
+        {mode === 'edit' && selected?.type === 'node' && projection.nodes.filter((node) => node.id === selected.id && node.kind !== 'goal').map((node) => (
+          <DragHandle
+            key={`path-handle:${node.id}`}
+            x={node.x + 28}
+            y={node.y}
+            label={`Drag to connect from ${node.title}`}
+            color={mapTheme.gold}
+            onDrop={(x, y) => onPathHandleDrop(node.id, x, y)}
+            onDragMove={(point) => onPathHandleDrag(node.id, point)}
+          />
+        ))}
+        {mode === 'edit' && selected?.type === 'connection' && projection.connections.filter((connection) => connection.id === selected.id).map((connection) => (
+          <DragHandle
+            key={`bend-handle:${connection.id}`}
+            x={connection.control.x}
+            y={connection.control.y}
+            label="Drag to bend connection"
+            color={mapTheme.violet}
+            onDrop={(x, y) => onBendDrop(connection.id, x, y)}
+          />
+        ))}
+      </View>
+    </View>
   );
 };
 
 const styles = StyleSheet.create({
   canvas: { overflow: 'hidden', backgroundColor: mapTheme.paper },
+  canvasPressable: { flex: 1 },
   nodeHit: { position: 'absolute', width: 48, minHeight: 48, alignItems: 'center', justifyContent: 'center', zIndex: 4 },
   markerMount: { alignItems: 'center' },
   markerWrap: { alignItems: 'center', justifyContent: 'center' },
   marker: { width: 34, height: 34, borderRadius: 17, borderWidth: 2.5, alignItems: 'center', justifyContent: 'center', shadowColor: mapTheme.shadow, shadowOpacity: 0.25, shadowRadius: 4 },
   goalMarker: { width: 40, height: 40, borderRadius: 20 },
   taskMarker: { borderRadius: 9 },
-  checkpointMarker: { width: 40, height: 28, borderRadius: 14 },
+  statusMarker: { width: 40, height: 28, borderRadius: 14 },
   selectedMarker: { borderWidth: 4, shadowOpacity: 0.7, shadowRadius: 7 },
   markerGlyph: { fontSize: 17, fontWeight: '900' },
   nodeLabel: { position: 'absolute', top: 43, maxWidth: 112, paddingHorizontal: 5, paddingVertical: 2, borderRadius: 7, overflow: 'hidden', color: mapTheme.ink, backgroundColor: 'rgba(255,253,248,0.9)', fontSize: 9, fontWeight: '700' },

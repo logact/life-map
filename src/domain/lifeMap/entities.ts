@@ -1,4 +1,4 @@
-export type PlannedKind = 'originStatus' | 'goal' | 'task' | 'checkpoint';
+export type PlannedKind = 'status' | 'goal' | 'task';
 export type Outcome = 'success' | 'todo' | 'failed';
 
 export interface PlannedNode {
@@ -7,6 +7,8 @@ export interface PlannedNode {
   title: string;
   description: string;
   outcome: Outcome;
+  /** Marks the single permanent origin status node ("Start"). */
+  permanent?: boolean;
   archivedAt?: string;
 }
 

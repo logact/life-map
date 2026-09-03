@@ -1,12 +1,14 @@
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, LayoutChangeEvent, Pressable, StatusBar, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { LoadProjectionRequest } from '../../application/lifeMap/LoadLifeMap';
 import { PortraitMapProjection, ScreenPoint } from '../../application/map/projectionTypes';
 import { ROAD_BOTTOM_Y, ROAD_RANK_GAP, RoadLayoutService } from '../../application/map/RoadLayoutService';
-import { fitCameraToBounds, focusCameraAboveSheet, zoomCameraAt } from '../../application/map/camera';
+import { clampCamera, fitCameraToBounds, focusCameraAboveSheet, zoomCameraAt } from '../../application/map/camera';
+import { minScaleForSemanticLevel } from '../../application/map/semanticZoom';
 import { LifeMapError } from '../../domain/lifeMap/LifeMapErrors';
 import { useLifeMapRuntime } from '../composition/LifeMapProvider';
-import { RuntimeNodeOption } from '../composition/createLifeMapRuntime';
+import { RuntimeNodeOption, RuntimeSegmentOption } from '../composition/createLifeMapRuntime';
 import { ComposerPreview, LifeMapCanvas } from './LifeMapCanvas';
 import { MapBottomSheet } from './MapBottomSheet';
 import { MapControls } from './MapControls';
@@ -24,9 +26,11 @@ export const LifeMapScreen = () => {
   const [session, dispatch] = useLifeMapSession();
   const window = useWindowDimensions();
   const [mapSize, setMapSize] = useState({ width: Math.min(window.width, 520), height: Math.max(420, window.height - 120) });
-  const [projection, setProjection] = useState<PortraitMapProjection>();
+  const [dataStamp, setDataStamp] = useState(0);
   const previousProjection = useRef<PortraitMapProjection | undefined>(undefined);
+  const latestRequest = useRef<LoadProjectionRequest | undefined>(undefined);
   const [options, setOptions] = useState<RuntimeNodeOption[]>([]);
+  const [segments, setSegments] = useState<RuntimeSegmentOption[]>([]);
   const [error, setError] = useState<string>();
   const [sparkIds, setSparkIds] = useState<string[]>([]);
   const sparkTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
@@ -34,27 +38,42 @@ export const LifeMapScreen = () => {
   const reducedMotion = useReducedMotion();
   const viewport = { width: mapSize.width, height: mapSize.height };
 
+  const request: LoadProjectionRequest = {
+    viewport,
+    camera: session.camera,
+    semanticLevel: session.semanticLevel,
+    focus: session.selection && session.selection.type !== 'summary'
+      ? { type: session.selection.type, id: session.selection.id }
+      : undefined,
+    outcomeFilters: session.filters,
+    activeRoute: session.activeRoute,
+  };
+  latestRequest.current = request;
+
+  // Camera/focus/filter changes re-project synchronously from cached data.
+  // Routing every pan frame through the async repository load painted stale
+  // projections between updates, which made the map flicker while dragging.
+  const projection = useMemo(
+    () => runtime.reproject(request) ?? previousProjection.current,
+    // dataStamp re-projects after the cached repository data is refreshed.
+    [runtime, session.camera, session.semanticLevel, session.selection, session.filters, session.activeRoute, mapSize, dataStamp],
+  );
+
+  useEffect(() => { previousProjection.current = projection; }, [projection]);
+
+  // Async repository loads run only on mount and after mutations; everything
+  // else is covered by the synchronous re-projection above.
   const load = useCallback(async () => {
     try {
-      const next = await runtime.load({
-        viewport,
-        camera: session.camera,
-        semanticLevel: session.semanticLevel,
-        focus: session.selection && session.selection.type !== 'summary'
-          ? { type: session.selection.type, id: session.selection.id }
-          : undefined,
-        outcomeFilters: session.filters,
-        activeRoute: session.activeRoute,
-        previousProjection: previousProjection.current,
-      });
-      previousProjection.current = next;
-      setProjection(next);
+      await runtime.load(latestRequest.current!);
       setOptions(await runtime.options());
+      setSegments(await runtime.segmentOptions());
+      setDataStamp((stamp) => stamp + 1);
       setError(undefined);
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : String(caught));
     }
-  }, [runtime, mapSize.width, mapSize.height, session.camera, session.semanticLevel, session.selection, session.filters, session.activeRoute]);
+  }, [runtime]);
 
   useEffect(() => { void load(); }, [load]);
 
@@ -62,14 +81,14 @@ export const LifeMapScreen = () => {
     if (sparkTimer.current) clearTimeout(sparkTimer.current);
   }, []);
 
-  const runMutation = async (operation: () => Promise<unknown>, success?: string) => {
+  const runMutation = async <T,>(operation: () => Promise<T>, success?: string): Promise<T | undefined> => {
     try {
       const before = previousProjection.current;
-      await operation();
+      const result = await operation();
       dispatch({ type: 'close-sheet' });
       if (success) dispatch({ type: 'toast', message: success });
       await load();
-      const after = previousProjection.current;
+      const after = runtime.reproject(latestRequest.current!);
       if (before && after) {
         const known = new Set(before.connections.map((connection) => connection.id));
         const fresh = after.connections.filter((connection) => !known.has(connection.id)).map((connection) => connection.id);
@@ -79,16 +98,23 @@ export const LifeMapScreen = () => {
           sparkTimer.current = setTimeout(() => setSparkIds([]), 1500);
         }
       }
+      return result;
     } catch (caught) {
       const message = caught instanceof LifeMapError ? caught.message : caught instanceof Error ? caught.message : String(caught);
       dispatch({ type: 'toast', message });
+      return undefined;
     }
   };
 
-  const gestureHandlers = useMapGestures({
+  // Enabled in edit mode too: pinch is the only way to reach deeper levels,
+  // and node/record drags still win because their views claim the responder first.
+  // While an edit drag handle is visible the single-finger pan is locked, so a
+  // handle drag can never fall through and pan the map instead.
+  const gestures = useMapGestures({
     camera: session.camera,
     viewport,
-    enabled: session.mode === 'visual' && !session.sheet,
+    enabled: !session.sheet,
+    panLocked: session.mode === 'edit' && (session.selection?.type === 'node' || session.selection?.type === 'connection'),
     onCamera: (camera) => dispatch({ type: 'set-camera', camera }),
   });
 
@@ -113,6 +139,20 @@ export const LifeMapScreen = () => {
       .filter((node) => node.id !== excludeId)
       .map((node) => ({ node, distance: Math.hypot(node.x - screenX, node.y - screenY) }))
       .sort((left, right) => left.distance - right.distance || left.node.id.localeCompare(right.node.id))[0];
+
+  /**
+   * Layer-local creation: a drop inside a current-level segment frame joins
+   * that segment. Sibling frames can overlap, so the smallest containing frame
+   * (the most specific layer) wins.
+   */
+  const segmentIdAtPoint = (screenX: number, screenY: number): string | undefined =>
+    projection?.segmentOverlays
+      .filter((overlay) => !overlay.dimmed
+        && screenX >= overlay.bounds.x && screenX <= overlay.bounds.x + overlay.bounds.width
+        && screenY >= overlay.bounds.y && screenY <= overlay.bounds.y + overlay.bounds.height)
+      .sort((left, right) =>
+        (left.bounds.width * left.bounds.height) - (right.bounds.width * right.bounds.height)
+        || left.id.localeCompare(right.id))[0]?.id;
 
   const handlePathDrag = (nodeId: string, point?: ScreenPoint) => {
     if (!point) {
@@ -152,6 +192,7 @@ export const LifeMapScreen = () => {
       worldX: Math.max(8, Math.min(382, world.x)),
       depthRank: Math.max(source.depthRank + 1, Math.min(8, Math.round((ROAD_BOTTOM_Y - world.y) / ROAD_RANK_GAP))),
       fromNodeId: nodeId,
+      segmentId: segmentIdAtPoint(screenX, screenY),
     } });
   };
 
@@ -179,18 +220,50 @@ export const LifeMapScreen = () => {
   };
 
   const handleFindRoad = async (fromNodeId: string, toNodeId: string) => {
+    const fromTitle = options.find((option) => option.id === fromNodeId)?.title ?? 'Start';
+    const toTitle = options.find((option) => option.id === toNodeId)?.title ?? 'that destination';
     const result = await runtime.findRoad(fromNodeId, toNodeId);
     if (result.status === 'unreachable') {
-      dispatch({ type: 'toast', message: 'No forward road reaches that destination yet.' });
+      dispatch({ type: 'toast', message: `No road from ${fromTitle} to ${toTitle} yet · connect this node first` });
       return;
     }
     dispatch({ type: 'show-route', route: result });
-    dispatch({ type: 'set-camera', camera: fitCameraToBounds(result.bounds, viewport, 80) });
+    const fit = fitCameraToBounds(result.bounds, viewport, 80);
+    const routeMinScale = minScaleForSemanticLevel(result.requiredSemanticLevel);
+    dispatch({ type: 'set-camera', camera: fit.scale >= routeMinScale ? fit : { ...fit, scale: routeMinScale } });
+    dispatch({ type: 'toast', message: `Showing road to ${toTitle}` });
   };
 
-  const handleComposerDraft = useCallback((draft: { title: string; kind: 'task' | 'checkpoint' | 'goal'; outcome: 'success' | 'todo' | 'failed' }) => {
+  const handleQueryRoutes = useCallback((fromNodeId: string) => runtime.routePreviews(fromNodeId), [runtime]);
+
+  const handleComposerDraft = useCallback((draft: { title: string; kind: 'task' | 'status' | 'goal'; outcome: 'success' | 'todo' | 'failed' }) => {
     dispatch({ type: 'set-composer-draft', draft });
   }, []);
+
+  /**
+   * After creating a sub-segment, step into its layer: find the level where the
+   * new segment would render and center the camera on it. Standalone segments
+   * never appear in overlays, so for them this quietly does nothing.
+   */
+  const stepIntoSegment = (segmentId: string) => {
+    for (let level = 0; level <= 4; level += 1) {
+      const scale = minScaleForSemanticLevel(level);
+      const cameraAtLevel = { ...session.camera, scale };
+      const overlay = runtime.reproject({
+        ...latestRequest.current!,
+        focus: { type: 'segment', id: segmentId },
+        camera: cameraAtLevel,
+        semanticLevel: level,
+      })?.segmentOverlays.find((candidate) => candidate.id === segmentId);
+      if (overlay) {
+        const center = { x: overlay.bounds.x + overlay.bounds.width / 2, y: overlay.bounds.y + overlay.bounds.height / 2 };
+        const world = layoutService.screenToWorld(center, viewport, cameraAtLevel);
+        dispatch({ type: 'set-camera', camera: clampCamera({ centerX: world.x, centerY: world.y, scale }, viewport) });
+        dispatch({ type: 'close-sheet' });
+        return;
+      }
+    }
+  };
 
   if (!projection && !error) {
     return <SafeAreaView style={styles.safe}><StatusBar barStyle="dark-content" /><View style={styles.center}><ActivityIndicator color={mapTheme.forest} /><Text style={styles.loading}>Preparing your roads…</Text></View></SafeAreaView>;
@@ -201,9 +274,6 @@ export const LifeMapScreen = () => {
   if (!projection) return null;
 
   const routeActive = !!session.activeRoute;
-  const selectedSegmentTitle = session.selection?.type === 'segment'
-    ? projection.segmentOverlays.find((overlay) => overlay.id === session.selection?.id)?.title
-    : undefined;
 
   let composerPreview: ComposerPreview | undefined;
   if (session.sheet === 'composer' && session.composerPoint) {
@@ -235,7 +305,6 @@ export const LifeMapScreen = () => {
           summary={projection.headerSummary}
           onRoute={() => dispatch({ type: 'open-sheet', sheet: 'route' })}
           onReset={() => dispatch({ type: 'reset-camera' })}
-          onLegend={() => dispatch({ type: 'open-sheet', sheet: 'legend' })}
           onClearRoute={() => dispatch({ type: 'clear-route' })}
         />
         <View style={styles.mapArea} onLayout={onMapLayout}>
@@ -244,17 +313,50 @@ export const LifeMapScreen = () => {
             width={mapSize.width}
             height={mapSize.height}
             mode={session.mode}
-            gestureHandlers={gestureHandlers}
+            gestureHandlers={gestures.gestureHandlers}
             selected={session.selection}
             routeActive={routeActive}
             reducedMotion={reducedMotion}
             draftPath={session.draftPath}
             composerPreview={composerPreview}
             sparkConnectionIds={sparkIds}
-            onSelect={(selection) => {
+            onSelect={(incoming) => {
+              let selection = incoming;
+              if (incoming.type === 'node') {
+                // Two-tap edge selection: a second node tap resolves the edge
+                // between the pending start endpoint and this node. No edge —
+                // the tap stays a plain node select and re-arms the start.
+                const startId = session.edgeStartNodeId;
+                const edge = startId && startId !== incoming.id
+                  ? projection.connections.find((candidate) =>
+                      (candidate.fromNodeId === startId && candidate.toNodeId === incoming.id)
+                      || (candidate.fromNodeId === incoming.id && candidate.toNodeId === startId))
+                  : undefined;
+                if (edge) {
+                  dispatch({ type: 'set-edge-start' });
+                  selection = { type: 'connection', id: edge.id };
+                } else {
+                  dispatch({ type: 'set-edge-start', id: incoming.id });
+                }
+              } else {
+                dispatch({ type: 'set-edge-start' });
+              }
               if (selection.type === 'summary') {
-                dispatch({ type: 'set-level', level: session.semanticLevel + 1 });
+                // A summary road hides detail nodes — tapping it zooms in to reveal them.
                 dispatch({ type: 'select', selection });
+                const point = selectionFocusPoint(selection, projection);
+                if (point) dispatch({ type: 'set-camera', camera: zoomCameraAt(session.camera, 1.45, point, viewport) });
+                return;
+              }
+              if (selection.type === 'connection' && session.mode === 'edit') {
+                // Edit mode extracts the tapped edge into its own deeper segment:
+                // the current level collapses it to a summary line, the camera
+                // steps into the new layer, and the sheet reopens on the edge.
+                void (async () => {
+                  const segmentId = await runMutation(() => runtime.extractConnection(selection.id), 'Sub-segment created from connection');
+                  if (segmentId) stepIntoSegment(segmentId);
+                  dispatch({ type: 'select', selection });
+                })();
                 return;
               }
               dispatch({ type: 'select', selection });
@@ -274,24 +376,25 @@ export const LifeMapScreen = () => {
               dispatch({ type: 'open-composer', point: {
                 worldX: Math.max(8, Math.min(382, world.x)),
                 depthRank: Math.max(1, Math.min(8, Math.round((ROAD_BOTTOM_Y - world.y) / ROAD_RANK_GAP))),
-                segmentId: session.selection?.type === 'segment' ? session.selection.id : undefined,
+                segmentId: segmentIdAtPoint(screenX, screenY),
               } });
             }}
             onEdgeLongPress={handleEdgeLongPress}
+            onTap={(x, y) => {
+              // A blank tap also cancels a pending edge-start endpoint.
+              if (session.edgeStartNodeId) dispatch({ type: 'set-edge-start' });
+              gestures.onTap(x, y);
+            }}
           />
           <MapControls
             mode={session.mode}
-            level={session.semanticLevel}
             onMode={(mode) => dispatch({ type: 'set-mode', mode })}
-            onLevel={(level) => dispatch({ type: 'set-level', level })}
-            onCameraZoom={(factor) => dispatch({ type: 'set-camera', camera: zoomCameraAt(session.camera, factor, { x: viewport.width / 2, y: viewport.height / 2 }, viewport) })}
             onResetLayout={() => void runMutation(() => runtime.resetLayout(), 'Placements reset')}
           />
           <MapHint
             mode={session.mode}
             level={session.semanticLevel}
             scale={session.camera.scale}
-            selectedSegmentTitle={selectedSegmentTitle}
             routeActive={routeActive}
           />
           {session.mode === 'edit' && (
@@ -306,8 +409,10 @@ export const LifeMapScreen = () => {
         session={session}
         projection={projection}
         options={options}
+        segments={segments}
         onClose={() => dispatch({ type: 'close-sheet' })}
         onFindRoad={(from, to) => void handleFindRoad(from, to)}
+        onQueryRoutes={handleQueryRoutes}
         onToggleFilter={(outcome) => dispatch({ type: 'toggle-filter', outcome })}
         onChangeOutcome={(id, outcome) => void runMutation(() => runtime.changeOutcome(id, outcome), 'Outcome updated')}
         onEditNode={(id, value) => void runMutation(() => runtime.editNode(id, value), 'Node updated')}
@@ -316,7 +421,10 @@ export const LifeMapScreen = () => {
         onBend={(id, offsetX) => void runMutation(() => runtime.bendConnection(id, offsetX, 0), 'Edge curve moved')}
         onAddRecord={(targetId, summary) => void runMutation(async () => {
           await runtime.addRecord(targetId, summary);
-          dispatch({ type: 'set-level', level: 4 });
+          const detailScale = minScaleForSemanticLevel(4);
+          if (session.camera.scale < detailScale) {
+            dispatch({ type: 'set-camera', camera: { ...session.camera, scale: detailScale } });
+          }
         }, 'Record attached')}
         onOpenRecord={() => dispatch({ type: 'open-sheet', sheet: 'record' })}
         onCreate={(value) => {
@@ -327,12 +435,25 @@ export const LifeMapScreen = () => {
             return;
           }
           const { connectionId, ...placement } = point;
-          void runMutation(() => runtime.createNode({ ...value, ...placement }), 'Planned point added');
+          void runMutation(async () => {
+            await runtime.createNode({ ...value, ...placement });
+            // A point dropped into a deep frame inherits that layer, which a
+            // summary zoom would hide — center on it at a detail scale.
+            const detailScale = minScaleForSemanticLevel(2);
+            if (session.camera.scale < detailScale) {
+              dispatch({ type: 'set-camera', camera: {
+                centerX: placement.worldX,
+                centerY: ROAD_BOTTOM_Y - placement.depthRank * ROAD_RANK_GAP,
+                scale: detailScale,
+              } });
+            }
+          }, 'Planned point added');
         }}
         onConnect={(from, to) => void runMutation(() => runtime.connect(from, to), 'Forward connection added')}
         onArmDelete={(id) => dispatch({ type: 'arm-delete', id })}
         onSheetHeight={(height) => dispatch({ type: 'set-sheet-height', height })}
         onComposerDraft={handleComposerDraft}
+        onMoveNodeToSegment={(nodeId, segmentId) => void runMutation(() => runtime.moveNodeToSegment(nodeId, segmentId), 'Moved to a new layer')}
       />
     </SafeAreaView>
   );

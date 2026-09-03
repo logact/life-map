@@ -7,17 +7,14 @@ interface MapHintProps {
   mode: SessionMode;
   level: number;
   scale: number;
-  selectedSegmentTitle?: string;
   routeActive: boolean;
 }
 
-export const MapHint = ({ mode, level, scale, selectedSegmentTitle, routeActive }: MapHintProps) => {
+export const MapHint = ({ mode, level, scale, routeActive }: MapHintProps) => {
   if (routeActive) return null;
   const copy = mode === 'visual'
-    ? `Drag to move · pinch for detail · L${level} · ${Math.round(scale * 100)}%`
-    : selectedSegmentTitle
-      ? `${selectedSegmentTitle} selected · hold blank space to add a node`
-      : 'Move items · hold blank or drag ↗ to create';
+    ? `Drag to move · pinch through layers · L${level} · ${Math.round(scale * 100)}%`
+    : 'Move items · hold blank or drag ↗ to create · tap two endpoints to select their edge';
   return (
     <View pointerEvents="none" style={styles.hint}>
       <Text testID="map-hint" style={styles.copy}>{copy}</Text>

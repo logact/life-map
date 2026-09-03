@@ -3,8 +3,8 @@ import { LifeMapRuntime, createLifeMapRuntime } from './createLifeMapRuntime';
 
 const LifeMapRuntimeContext = createContext<LifeMapRuntime | undefined>(undefined);
 
-export const LifeMapProvider = ({ children }: PropsWithChildren) => {
-  const [runtime] = useState(createLifeMapRuntime);
+export const LifeMapProvider = ({ children, runtime: provided }: PropsWithChildren<{ runtime?: LifeMapRuntime }>) => {
+  const [runtime] = useState(() => provided ?? createLifeMapRuntime());
   return <LifeMapRuntimeContext.Provider value={runtime}>{children}</LifeMapRuntimeContext.Provider>;
 };
 
