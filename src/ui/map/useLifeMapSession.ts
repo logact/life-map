@@ -46,6 +46,8 @@ export interface LifeMapSessionState {
   draftPath?: DraftPath;
   /** Node tapped as the pending start endpoint for two-tap edge selection. */
   edgeStartNodeId?: string;
+  /** Ranked alternative paths awaiting the user's choice in the route sheet. */
+  pathChoices?: RoadSearchResult[];
   toast?: string;
 }
 
@@ -63,6 +65,7 @@ export type SessionAction =
   | { type: 'set-composer-draft'; draft: ComposerDraft }
   | { type: 'set-draft-path'; draft?: DraftPath }
   | { type: 'set-edge-start'; id?: string }
+  | { type: 'set-path-choices'; paths?: RoadSearchResult[] }
   | { type: 'set-sheet-height'; height: number }
   | { type: 'toast'; message?: string }
   | { type: 'reset-camera' };
@@ -80,7 +83,7 @@ export const initialLifeMapSession: LifeMapSessionState = {
 export const lifeMapSessionReducer = (state: LifeMapSessionState, action: SessionAction): LifeMapSessionState => {
   switch (action.type) {
     case 'set-mode':
-      return { ...state, mode: action.mode, sheet: undefined, selection: undefined, deleteArmedId: undefined, composerPoint: undefined, composerDraft: undefined, draftPath: undefined, edgeStartNodeId: undefined };
+      return { ...state, mode: action.mode, sheet: undefined, selection: undefined, deleteArmedId: undefined, composerPoint: undefined, composerDraft: undefined, draftPath: undefined, edgeStartNodeId: undefined, pathChoices: undefined };
     case 'set-camera':
       return { ...state, camera: action.camera, semanticLevel: semanticLevelForScale(action.camera.scale) };
     case 'toggle-filter': {
@@ -93,11 +96,11 @@ export const lifeMapSessionReducer = (state: LifeMapSessionState, action: Sessio
     case 'open-sheet':
       return { ...state, sheet: action.sheet, deleteArmedId: undefined };
     case 'close-sheet':
-      return { ...state, sheet: undefined, deleteArmedId: undefined, composerPoint: undefined, composerDraft: undefined };
+      return { ...state, sheet: undefined, deleteArmedId: undefined, composerPoint: undefined, composerDraft: undefined, pathChoices: undefined };
     case 'show-route':
-      return { ...state, activeRoute: action.route, sheet: undefined };
+      return { ...state, activeRoute: action.route, sheet: undefined, pathChoices: undefined };
     case 'clear-route':
-      return { ...state, activeRoute: undefined };
+      return { ...state, activeRoute: undefined, pathChoices: undefined };
     case 'arm-delete':
       return { ...state, deleteArmedId: action.id };
     case 'open-composer':
@@ -108,6 +111,8 @@ export const lifeMapSessionReducer = (state: LifeMapSessionState, action: Sessio
       return { ...state, draftPath: action.draft };
     case 'set-edge-start':
       return { ...state, edgeStartNodeId: action.id };
+    case 'set-path-choices':
+      return { ...state, pathChoices: action.paths };
     case 'set-sheet-height':
       return Math.abs(state.sheetHeight - action.height) < 1 ? state : { ...state, sheetHeight: action.height };
     case 'toast':

@@ -2,7 +2,7 @@ import React from 'react';
 import { KeyboardAvoidingView } from 'react-native';
 import { fireEvent, render, waitFor } from '@testing-library/react-native';
 import { PortraitMapProjection } from '../../src/application/map/projectionTypes';
-import { RoadPreview } from '../../src/application/map/FindRoadService';
+import { RoadPreview, RoadSearchResult } from '../../src/application/map/FindRoadService';
 import { RuntimeNodeOption, RuntimeSegmentOption } from '../../src/ui/composition/createLifeMapRuntime';
 import { MapBottomSheet } from '../../src/ui/map/MapBottomSheet';
 import { LifeMapSessionState, initialLifeMapSession } from '../../src/ui/map/useLifeMapSession';
@@ -32,6 +32,8 @@ const baseProps = (session: LifeMapSessionState, overrides: Record<string, unkno
   options: [] as RuntimeNodeOption[],
   onClose: jest.fn(),
   onFindRoad: jest.fn(),
+  onChoosePath: jest.fn(),
+  onClearPathChoices: jest.fn(),
   onQueryRoutes: jest.fn((_from: string) => Promise.resolve([] as RoadPreview[])),
   onToggleFilter: jest.fn(),
   onChangeOutcome: jest.fn(),
@@ -160,5 +162,26 @@ describe('MapBottomSheet route search', () => {
     const screen = render(<MapBottomSheet {...props} />);
     fireEvent(screen.getByLabelText('Search destination'), 'submitEditing');
     await waitFor(() => expect(props.onFindRoad).toHaveBeenCalledWith('start', 'marathon'));
+  });
+
+  it('lists the alternative paths and hands the chosen one back', () => {
+    const paths: RoadSearchResult[] = [
+      { status: 'found', fromNodeId: 'start', toNodeId: 'marathon', nodeIds: ['start', 'run', 'marathon'], connectionIds: ['r1', 'r2'], failedEndpointCount: 0, requiredSemanticLevel: 4, bounds: { minX: 0, minY: 0, maxX: 1, maxY: 1 } },
+      { status: 'found', fromNodeId: 'start', toNodeId: 'marathon', nodeIds: ['start', 'sleep', 'marathon'], connectionIds: ['r3', 'r4'], failedEndpointCount: 1, requiredSemanticLevel: 4, bounds: { minX: 0, minY: 0, maxX: 1, maxY: 1 } },
+    ];
+    const session: LifeMapSessionState = { ...routeSession, pathChoices: paths };
+    const props = baseProps(session, { options });
+    const screen = render(<MapBottomSheet {...props} />);
+
+    // The search inputs are replaced by the ranked choice list.
+    expect(screen.queryByLabelText('Search destination')).toBeNull();
+    expect(screen.getByText('2 paths from Started here to Finish a marathon')).toBeTruthy();
+    expect(screen.getByText('2 connections · 1 failed')).toBeTruthy();
+    expect(screen.getByText('Started here → sleep → Finish a marathon')).toBeTruthy();
+
+    fireEvent.press(screen.getByLabelText('Take path 2 to Finish a marathon'));
+    expect(props.onChoosePath).toHaveBeenCalledWith(paths[1]);
+    fireEvent.press(screen.getByText('Back to search'));
+    expect(props.onClearPathChoices).toHaveBeenCalled();
   });
 });

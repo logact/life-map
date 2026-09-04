@@ -1,7 +1,7 @@
 import { CaptureRecord } from '../../application/lifeMap/CaptureRecord';
 import { EditLifeMap } from '../../application/lifeMap/EditLifeMap';
 import { LoadLifeMap, LoadProjectionRequest } from '../../application/lifeMap/LoadLifeMap';
-import { FindRoadResult, FindRoadService, RoadPreview } from '../../application/map/FindRoadService';
+import { FindRoadResult, FindRoadService, RoadPreview, RoadSearchResult } from '../../application/map/FindRoadService';
 import { LifeMapSnapshot, MapLayoutSnapshot, PlannedKind, PlannedNode } from '../../domain/lifeMap/entities';
 import { segmentDepth } from '../../domain/lifeMap/segmentTree';
 import { MemoryLifeMapRepository } from '../../infrastructure/memory/MemoryLifeMapRepository';
@@ -64,6 +64,12 @@ export class LifeMapRuntime {
   async findRoad(fromNodeId: string, toNodeId: string): Promise<FindRoadResult> {
     const [snapshot, layout] = await Promise.all([this.lifeMaps.load(), this.layouts.load()]);
     return this.findRoadService.find(snapshot, layout, fromNodeId, toNodeId);
+  }
+
+  /** Every path from → to, ranked best-first — the alternatives the user can choose among. */
+  async findRoads(fromNodeId: string, toNodeId: string): Promise<RoadSearchResult[]> {
+    const [snapshot, layout] = await Promise.all([this.lifeMaps.load(), this.layouts.load()]);
+    return this.findRoadService.findAll(snapshot, layout, fromNodeId, toNodeId);
   }
 
   async routePreviews(fromNodeId: string): Promise<RoadPreview[]> {

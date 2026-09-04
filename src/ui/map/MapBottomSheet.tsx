@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { PortraitMapProjection } from '../../application/map/projectionTypes';
-import { RoadPreview } from '../../application/map/FindRoadService';
+import { RoadPreview, RoadSearchResult } from '../../application/map/FindRoadService';
 import { Outcome, PlannedKind } from '../../domain/lifeMap/entities';
 import { RuntimeNodeOption, RuntimeSegmentOption } from '../composition/createLifeMapRuntime';
 import { MapComposer } from './MapComposer';
@@ -15,6 +15,8 @@ interface MapBottomSheetProps {
   segments: RuntimeSegmentOption[];
   onClose: () => void;
   onFindRoad: (fromNodeId: string, toNodeId: string) => void;
+  onChoosePath: (path: RoadSearchResult) => void;
+  onClearPathChoices: () => void;
   onQueryRoutes: (fromNodeId: string) => Promise<RoadPreview[]>;
   onToggleFilter: (outcome: Outcome) => void;
   onChangeOutcome: (nodeId: string, outcome: Outcome) => void;
@@ -41,6 +43,8 @@ export const MapBottomSheet = ({
   segments,
   onClose,
   onFindRoad,
+  onChoosePath,
+  onClearPathChoices,
   onQueryRoutes,
   onToggleFilter,
   onChangeOutcome,
@@ -93,6 +97,7 @@ export const MapBottomSheet = ({
   [options, startQuery, routeFrom]);
   const [previews, setPreviews] = useState<Record<string, RoadPreview> | undefined>(undefined);
   const routeFromTitle = options.find((option) => option.id === routeFrom)?.title ?? 'Start';
+  const titleOf = (nodeId: string) => options.find((option) => option.id === nodeId)?.title ?? nodeId;
   useEffect(() => {
     if (session.sheet !== 'route') return undefined;
     setPreviews(undefined);
@@ -149,7 +154,31 @@ export const MapBottomSheet = ({
           </Pressable>
         </View>
         <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={styles.content}>
-          {session.sheet === 'route' && (
+          {session.sheet === 'route' && session.pathChoices && (
+            <>
+              <Text style={styles.label}>{`${session.pathChoices.length} paths from ${titleOf(session.pathChoices[0].fromNodeId)} to ${titleOf(session.pathChoices[0].toNodeId)}`}</Text>
+              <View style={styles.results}>
+                {session.pathChoices.map((path, index) => (
+                  <Pressable
+                    key={path.connectionIds.join('/')}
+                    accessibilityRole="button"
+                    accessibilityLabel={`Take path ${index + 1} to ${titleOf(path.toNodeId)}`}
+                    onPress={() => onChoosePath(path)}
+                    style={styles.result}
+                  >
+                    <View style={styles.resultCopy}>
+                      <Text style={styles.resultTitle}>{`Path ${index + 1}`}</Text>
+                      <Text style={styles.resultMeta}>{`${path.connectionIds.length} connections · ${path.failedEndpointCount} failed`}</Text>
+                      <Text numberOfLines={2} style={styles.resultMeta}>{path.nodeIds.map(titleOf).join(' → ')}</Text>
+                    </View>
+                    <Text style={styles.resultArrow}>›</Text>
+                  </Pressable>
+                ))}
+              </View>
+              <SecondaryButton label="Back to search" onPress={onClearPathChoices} />
+            </>
+          )}
+          {session.sheet === 'route' && !session.pathChoices && (
             <>
               <Text style={styles.label}>Start</Text>
               <TextInput

@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { ActivityIndicator, LayoutChangeEvent, Pressable, StatusBar, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { LoadProjectionRequest } from '../../application/lifeMap/LoadLifeMap';
+import { RoadSearchResult } from '../../application/map/FindRoadService';
 import { PortraitMapProjection, ScreenPoint } from '../../application/map/projectionTypes';
 import { ROAD_BOTTOM_Y, ROAD_RANK_GAP, RoadLayoutService } from '../../application/map/RoadLayoutService';
 import { clampCamera, fitCameraToBounds, focusCameraAboveSheet, zoomCameraAt } from '../../application/map/camera';
@@ -219,19 +220,28 @@ export const LifeMapScreen = () => {
     );
   };
 
-  const handleFindRoad = async (fromNodeId: string, toNodeId: string) => {
-    const fromTitle = options.find((option) => option.id === fromNodeId)?.title ?? 'Start';
-    const toTitle = options.find((option) => option.id === toNodeId)?.title ?? 'that destination';
-    const result = await runtime.findRoad(fromNodeId, toNodeId);
-    if (result.status === 'unreachable') {
-      dispatch({ type: 'toast', message: `No road from ${fromTitle} to ${toTitle} yet · connect this node first` });
-      return;
-    }
+  const activateRoute = (result: RoadSearchResult, toTitle: string) => {
     dispatch({ type: 'show-route', route: result });
     const fit = fitCameraToBounds(result.bounds, viewport, 80);
     const routeMinScale = minScaleForSemanticLevel(result.requiredSemanticLevel);
     dispatch({ type: 'set-camera', camera: fit.scale >= routeMinScale ? fit : { ...fit, scale: routeMinScale } });
     dispatch({ type: 'toast', message: `Showing road to ${toTitle}` });
+  };
+
+  const handleFindRoad = async (fromNodeId: string, toNodeId: string) => {
+    const fromTitle = options.find((option) => option.id === fromNodeId)?.title ?? 'Start';
+    const toTitle = options.find((option) => option.id === toNodeId)?.title ?? 'that destination';
+    const paths = await runtime.findRoads(fromNodeId, toNodeId);
+    if (paths.length === 0) {
+      dispatch({ type: 'toast', message: `No road from ${fromTitle} to ${toTitle} yet · connect this node first` });
+      return;
+    }
+    if (paths.length === 1) {
+      activateRoute(paths[0], toTitle);
+      return;
+    }
+    // Several roads lead there — the sheet lists them for the user to choose.
+    dispatch({ type: 'set-path-choices', paths });
   };
 
   const handleQueryRoutes = useCallback((fromNodeId: string) => runtime.routePreviews(fromNodeId), [runtime]);
@@ -412,6 +422,8 @@ export const LifeMapScreen = () => {
         segments={segments}
         onClose={() => dispatch({ type: 'close-sheet' })}
         onFindRoad={(from, to) => void handleFindRoad(from, to)}
+        onChoosePath={(path) => activateRoute(path, options.find((option) => option.id === path.toNodeId)?.title ?? 'that destination')}
+        onClearPathChoices={() => dispatch({ type: 'set-path-choices' })}
         onQueryRoutes={handleQueryRoutes}
         onToggleFilter={(outcome) => dispatch({ type: 'toggle-filter', outcome })}
         onChangeOutcome={(id, outcome) => void runMutation(() => runtime.changeOutcome(id, outcome), 'Outcome updated')}

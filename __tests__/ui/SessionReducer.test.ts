@@ -55,4 +55,24 @@ describe('Life Map session reducer', () => {
     expect(measured.sheetHeight).toBe(320);
     expect(lifeMapSessionReducer(measured, { type: 'set-sheet-height', height: 320.4 })).toBe(measured);
   });
+
+  it('keeps path choices until a route is chosen, cleared, or the sheet closes', () => {
+    const path = {
+      status: 'found' as const,
+      fromNodeId: 'start',
+      toNodeId: 'work',
+      nodeIds: ['start', 'work'],
+      connectionIds: ['r6'],
+      failedEndpointCount: 0,
+      requiredSemanticLevel: 0,
+      bounds: { minX: 0, minY: 0, maxX: 1, maxY: 1 },
+    };
+    const offered = lifeMapSessionReducer(initialLifeMapSession, { type: 'set-path-choices', paths: [path] });
+    expect(offered.pathChoices).toEqual([path]);
+    expect(lifeMapSessionReducer(offered, { type: 'show-route', route: path }).pathChoices).toBeUndefined();
+    expect(lifeMapSessionReducer(offered, { type: 'clear-route' }).pathChoices).toBeUndefined();
+    expect(lifeMapSessionReducer(offered, { type: 'close-sheet' }).pathChoices).toBeUndefined();
+    expect(lifeMapSessionReducer(offered, { type: 'set-mode', mode: 'edit' }).pathChoices).toBeUndefined();
+    expect(lifeMapSessionReducer(offered, { type: 'set-path-choices' }).pathChoices).toBeUndefined();
+  });
 });

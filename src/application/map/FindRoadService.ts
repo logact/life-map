@@ -27,6 +27,10 @@ export interface RoadPreview {
   failedEndpointCount: number;
 }
 
+/** Cap on the alternatives offered for one query, and on the enumeration budget behind them. */
+export const PATH_CHOICE_LIMIT = 8;
+const PATH_ENUMERATION_BUDGET = 256;
+
 interface Candidate {
   nodeId: string;
   nodeIds: string[];
@@ -96,6 +100,52 @@ export class FindRoadService {
     const candidate = best.get(toNodeId);
     if (!candidate) return { status: 'unreachable', fromNodeId, toNodeId };
     return this.result(snapshot, layout, candidate, fromNodeId, toNodeId);
+  }
+
+  /**
+   * Every simple path from → to (the connection graph is a DAG), ranked like
+   * `find`: fewest failed endpoints, then fewest hops. Enumeration is
+   * budgeted and the ranked list sliced to `limit`, so dense maps stay cheap.
+   */
+  findAll(
+    snapshot: LifeMapSnapshot,
+    layout: MapLayoutSnapshot,
+    fromNodeId: string,
+    toNodeId: string,
+    limit: number = PATH_CHOICE_LIMIT,
+  ): RoadSearchResult[] {
+    const isActive = (id: string) => snapshot.nodes.some((node) => node.id === id && !node.archivedAt);
+    if (!isActive(fromNodeId) || !isActive(toNodeId) || fromNodeId === toNodeId) return [];
+    const activeNodes = new Map(snapshot.nodes.filter((node) => !node.archivedAt).map((node) => [node.id, node]));
+    const outgoing = new Map<string, typeof snapshot.connections>();
+    for (const connection of [...snapshot.connections].sort((a, b) => a.id.localeCompare(b.id))) {
+      const values = outgoing.get(connection.fromNodeId) ?? [];
+      values.push(connection);
+      outgoing.set(connection.fromNodeId, values);
+    }
+    const complete: Candidate[] = [];
+    const walk = (nodeIds: string[], connectionIds: string[], failed: number) => {
+      if (complete.length >= PATH_ENUMERATION_BUDGET) return;
+      const currentId = nodeIds[nodeIds.length - 1];
+      if (currentId === toNodeId) {
+        complete.push({ nodeId: currentId, nodeIds, connectionIds, failed, key: connectionIds.join('/') });
+        return;
+      }
+      for (const connection of outgoing.get(currentId) ?? []) {
+        const target = activeNodes.get(connection.toNodeId);
+        if (!target || nodeIds.includes(target.id)) continue;
+        walk(
+          [...nodeIds, target.id],
+          [...connectionIds, connection.id],
+          failed + (target.outcome === 'failed' ? 1 : 0),
+        );
+      }
+    };
+    walk([fromNodeId], [], 0);
+    return complete
+      .sort(compare)
+      .slice(0, Math.max(1, limit))
+      .map((candidate) => this.result(snapshot, layout, candidate, fromNodeId, toNodeId));
   }
 
   private result(

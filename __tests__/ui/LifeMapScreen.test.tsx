@@ -17,6 +17,15 @@ const renderSeededApp = () =>
     </SafeAreaProvider>,
   );
 
+/** Routes Start → Finish a marathon, a two-path destination: the choice sheet
+ * needs one extra tap on the best path before the route shows. */
+const showMarathonRoad = async (screen: ReturnType<typeof render>) => {
+  fireEvent.press(await screen.findByLabelText('Query roads'));
+  fireEvent.changeText(screen.getByLabelText('Search destination'), 'marathon');
+  fireEvent.press(await screen.findByLabelText('Find road to Finish a marathon'));
+  fireEvent.press(await screen.findByLabelText('Take path 1 to Finish a marathon'));
+};
+
 describe('LifeMapScreen', () => {
   it('loads the portrait shell and exposes the main visual controls', async () => {
     const screen = render(<App />);
@@ -45,15 +54,31 @@ describe('LifeMapScreen', () => {
     expect(screen.getByTestId('map-hint').props.children).toContain('Move items');
     fireEvent.press(screen.getByLabelText('Switch to Visual mode'));
 
-    fireEvent.press(screen.getByLabelText('Query roads'));
-    fireEvent.changeText(screen.getByLabelText('Search destination'), 'marathon');
-    fireEvent.press(await screen.findByLabelText('Find road to Finish a marathon'));
+    await showMarathonRoad(screen);
 
     expect(await screen.findByText('Started here → Finish a marathon')).toBeTruthy();
     expect(screen.queryByTestId('map-hint')).toBeNull();
 
     fireEvent.press(screen.getByLabelText('Clear shown road'));
     expect(await screen.findByTestId('map-hint')).toBeTruthy();
+  });
+
+  it('lists every path to a destination and activates the chosen one', async () => {
+    const screen = renderSeededApp();
+    fireEvent.press(await screen.findByLabelText('Query roads'));
+    fireEvent.changeText(screen.getByLabelText('Search destination'), 'marathon');
+    fireEvent.press(await screen.findByLabelText('Find road to Finish a marathon'));
+
+    // Two roads lead to the marathon — best-first via Protect sleep, then via
+    // Run three times — and no route is active until one is chosen.
+    expect(await screen.findByText('2 paths from Started here to Finish a marathon')).toBeTruthy();
+    expect(screen.getByText(/Protect sleep/)).toBeTruthy();
+    expect(screen.getByText(/Run three times/)).toBeTruthy();
+    expect(screen.queryByTestId('map-hint')).toBeTruthy();
+
+    fireEvent.press(screen.getByLabelText('Take path 2 to Finish a marathon'));
+    expect(await screen.findByText('Started here → Finish a marathon')).toBeTruthy();
+    expect(screen.queryByTestId('map-hint')).toBeNull();
   });
 
   it('selects a node in Edit mode and opens its detail sheet', async () => {
@@ -184,9 +209,7 @@ describe('LifeMapScreen', () => {
 
     // Route finding zooms the camera to the deepest filed layer the route
     // touches — the atomic level for this road — so connections can be tapped.
-    fireEvent.press(screen.getByLabelText('Query roads'));
-    fireEvent.changeText(screen.getByLabelText('Search destination'), 'marathon');
-    fireEvent.press(await screen.findByLabelText('Find road to Finish a marathon'));
+    await showMarathonRoad(screen);
     fireEvent.press(await screen.findByLabelText('Clear shown road'));
 
     // Tapping the edge extracts it: no separate button press is needed.
@@ -228,9 +251,7 @@ describe('LifeMapScreen', () => {
     );
     fireEvent.press(await screen.findByLabelText('Switch to Edit mode'));
 
-    fireEvent.press(screen.getByLabelText('Query roads'));
-    fireEvent.changeText(screen.getByLabelText('Search destination'), 'marathon');
-    fireEvent.press(await screen.findByLabelText('Find road to Finish a marathon'));
+    await showMarathonRoad(screen);
     fireEvent.press(await screen.findByLabelText('Clear shown road'));
 
     const before = (await runtime.segmentOptions()).map((segment) => segment.id);
@@ -255,9 +276,7 @@ describe('LifeMapScreen', () => {
     );
     fireEvent.press(await screen.findByLabelText('Switch to Edit mode'));
 
-    fireEvent.press(screen.getByLabelText('Query roads'));
-    fireEvent.changeText(screen.getByLabelText('Search destination'), 'marathon');
-    fireEvent.press(await screen.findByLabelText('Find road to Finish a marathon'));
+    await showMarathonRoad(screen);
     fireEvent.press(await screen.findByLabelText('Clear shown road'));
 
     // First endpoint tap arms it and selects the node as usual; the second
@@ -287,9 +306,7 @@ describe('LifeMapScreen', () => {
     );
     fireEvent.press(await screen.findByLabelText('Switch to Edit mode'));
 
-    fireEvent.press(screen.getByLabelText('Query roads'));
-    fireEvent.changeText(screen.getByLabelText('Search destination'), 'marathon');
-    fireEvent.press(await screen.findByLabelText('Find road to Finish a marathon'));
+    await showMarathonRoad(screen);
     fireEvent.press(await screen.findByLabelText('Clear shown road'));
 
     // No edge runs between Build weekly base and the 10K checkpoint, so the
@@ -312,9 +329,7 @@ describe('LifeMapScreen', () => {
     );
     fireEvent.press(await screen.findByLabelText('Switch to Edit mode'));
 
-    fireEvent.press(screen.getByLabelText('Query roads'));
-    fireEvent.changeText(screen.getByLabelText('Search destination'), 'marathon');
-    fireEvent.press(await screen.findByLabelText('Find road to Finish a marathon'));
+    await showMarathonRoad(screen);
     fireEvent.press(await screen.findByLabelText('Clear shown road'));
 
     fireEvent(await screen.findByLabelText('task, Build weekly base, success'), 'responderRelease', { nativeEvent: {} });
@@ -337,9 +352,7 @@ describe('LifeMapScreen', () => {
       </SafeAreaProvider>,
     );
 
-    fireEvent.press(await screen.findByLabelText('Query roads'));
-    fireEvent.changeText(screen.getByLabelText('Search destination'), 'marathon');
-    fireEvent.press(await screen.findByLabelText('Find road to Finish a marathon'));
+    await showMarathonRoad(screen);
     fireEvent.press(await screen.findByLabelText('Clear shown road'));
 
     fireEvent.press(await screen.findByLabelText('task, Build weekly base, success'));
@@ -362,9 +375,7 @@ describe('LifeMapScreen', () => {
     );
 
     // Same deep camera as the Edit-mode test, but the mode stays Visual.
-    fireEvent.press(await screen.findByLabelText('Query roads'));
-    fireEvent.changeText(screen.getByLabelText('Search destination'), 'marathon');
-    fireEvent.press(await screen.findByLabelText('Find road to Finish a marathon'));
+    await showMarathonRoad(screen);
     fireEvent.press(await screen.findByLabelText('Clear shown road'));
 
     fireEvent.press(await screen.findByTestId('connection-hit-r5'));

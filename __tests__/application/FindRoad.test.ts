@@ -60,4 +60,37 @@ describe('FindRoadService', () => {
   it('returns no previews for an unknown origin', () => {
     expect(service.previewAll(snapshot, 'missing')).toEqual([]);
   });
+
+  describe('findAll', () => {
+    it('ranks every path best-first', () => {
+      const paths = service.findAll(snapshot, layout, 'work-route', 'work');
+      expect(paths.map((path) => path.connectionIds)).toEqual([['r6', 'r10'], ['r7', 'r11']]);
+      expect(paths[0].failedEndpointCount).toBe(0);
+      expect(paths[1].failedEndpointCount).toBe(1);
+    });
+
+    it('keeps the best path first, matching find', () => {
+      const best = service.find(snapshot, layout, 'start', 'marathon');
+      const all = service.findAll(snapshot, layout, 'start', 'marathon');
+      expect(best.status).toBe('found');
+      if (best.status === 'found') expect(all[0].connectionIds).toEqual(best.connectionIds);
+      expect(all.length).toBeGreaterThan(1);
+    });
+
+    it('returns a single result when only one path exists', () => {
+      const paths = service.findAll(snapshot, layout, 'start', 'plan-home');
+      expect(paths).toHaveLength(1);
+      expect(paths[0].connectionIds).toEqual(['r14']);
+    });
+
+    it('returns an empty list for unreachable or unknown endpoints', () => {
+      expect(service.findAll(snapshot, layout, 'start', 'move-kyoto')).toEqual([]);
+      expect(service.findAll(snapshot, layout, 'missing', 'work')).toEqual([]);
+    });
+
+    it('slices the ranked alternatives to the limit', () => {
+      expect(service.findAll(snapshot, layout, 'start', 'marathon', 1)).toHaveLength(1);
+      expect(service.findAll(snapshot, layout, 'start', 'marathon')).toHaveLength(2);
+    });
+  });
 });
