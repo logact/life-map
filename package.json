@@ -24,7 +24,7 @@
     "@babel/core": "^7.26.0",
     "@testing-library/react-native": "^13.3.3",
     "@types/jest": "^29.5.14",
-    "@types/node": "^22.9.0",
+    "@types/node": "^26.4.0",
     "@types/react": "~19.1.10",
     "@types/react-test-renderer": "^19.1.0",
     "babel-preset-expo": "~54.0.0",
